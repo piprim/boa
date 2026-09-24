@@ -1,0 +1,62 @@
+package pgdialect
+
+import (
+	"testing"
+
+	"github.com/piprim/pgcrud/schema"
+)
+
+func ptr[T any](v T) *T {
+	return &v
+}
+
+func TestArrayAppend(t *testing.T) {
+	tcases := []struct {
+		input any
+		out   string
+	}{
+		{
+			input: []byte{1, 2},
+			out:   `'{1,2}'`,
+		},
+		{
+			input: []*byte{ptr(byte(1)), ptr(byte(2))},
+			out:   `'{1,2}'`,
+		},
+		{
+			input: []int{1, 2},
+			out:   `'{1,2}'`,
+		},
+		{
+			input: []*int{ptr(1), ptr(2)},
+			out:   `'{1,2}'`,
+		},
+		{
+			input: []string{"foo", "bar"},
+			out:   `'{"foo","bar"}'`,
+		},
+		{
+			input: []*string{ptr("foo"), ptr("bar")},
+			out:   `'{"foo","bar"}'`,
+		},
+		{
+			input: [][]byte{{1, 2, 3}, {4, 5, 6}},
+			out:   `'{"\\x010203","\\x040506"}'`,
+		},
+		{
+			input: [][3]byte{{1, 2, 3}, {4, 5, 6}},
+			out:   `'{"\\x010203","\\x040506"}'`,
+		},
+	}
+
+	for _, tcase := range tcases {
+		out, err := Array(tcase.input).AppendQuery(schema.NewQueryGen(New()), []byte{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if string(out) != tcase.out {
+			t.Errorf("expected output to be %s, was %s", tcase.out, string(out))
+		}
+	}
+}
