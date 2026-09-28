@@ -1,1 +1,2 @@
 SELECT "model"."id", "model"."str" FROM "models" AS "model" WHERE ("model"."id" = NULL) FOR UPDATE
+-- args: []interface {}{}

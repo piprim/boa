@@ -13,11 +13,13 @@ import (
 type QueryEvent struct {
 	DB *DB
 
-	IQuery        Query
-	Query         string
-	QueryTemplate string
-	QueryArgs     []any
-	Model         Model
+	IQuery Query
+	// Query is the SQL sent to Postgres, with $n placeholders.
+	Query string
+	// QueryArgs are the values bound to the placeholders, in order. pgx option
+	// values are not included.
+	QueryArgs []any
+	Model     Model
 
 	StartTime time.Time
 	Result    pgconn.CommandTag
@@ -55,9 +57,8 @@ type QueryHook interface {
 func (db *DB) beforeQuery(
 	ctx context.Context,
 	iquery Query,
-	queryTemplate string,
-	queryArgs []any,
 	query string,
+	args []any,
 	model Model,
 ) (context.Context, *QueryEvent) {
 	if len(db.queryHooks) == 0 {
@@ -67,11 +68,10 @@ func (db *DB) beforeQuery(
 	event := &QueryEvent{
 		DB: db,
 
-		Model:         model,
-		IQuery:        iquery,
-		Query:         query,
-		QueryTemplate: queryTemplate,
-		QueryArgs:     queryArgs,
+		Model:     model,
+		IQuery:    iquery,
+		Query:     query,
+		QueryArgs: args,
 
 		StartTime: time.Now(),
 	}

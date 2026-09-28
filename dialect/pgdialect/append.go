@@ -1,7 +1,6 @@
 package pgdialect
 
 import (
-	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"time"
@@ -11,22 +10,11 @@ import (
 )
 
 var (
-	driverValuerType = reflect.TypeFor[driver.Valuer]()
-
-	stringType      = reflect.TypeFor[string]()
-	sliceStringType = reflect.TypeFor[[]string]()
-
-	intType      = reflect.TypeFor[int]()
-	sliceIntType = reflect.TypeFor[[]int]()
-
-	int64Type      = reflect.TypeFor[int64]()
-	sliceInt64Type = reflect.TypeFor[[]int64]()
-
-	float64Type      = reflect.TypeFor[float64]()
-	sliceFloat64Type = reflect.TypeFor[[]float64]()
-
-	timeType      = reflect.TypeFor[time.Time]()
-	sliceTimeType = reflect.TypeFor[[]time.Time]()
+	stringType  = reflect.TypeFor[string]()
+	intType     = reflect.TypeFor[int]()
+	int64Type   = reflect.TypeFor[int64]()
+	float64Type = reflect.TypeFor[float64]()
+	timeType    = reflect.TypeFor[time.Time]()
 )
 
 func appendTime(buf []byte, tm time.Time) []byte {
@@ -50,22 +38,29 @@ func (d *Dialect) hstoreAppender(typ reflect.Type) schema.AppenderFunc {
 	}
 
 	if typ.Key() == stringType && typ.Elem() == stringType {
-		return appendMapStringStringValue
+		return bindMapStringString
 	}
 
 	return func(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
 		err := fmt.Errorf("pgcrud: Hstore(unsupported %s)", v.Type())
-		return dialect.AppendError(b, err)
+		return gen.BindError(b, err)
 	}
 }
 
-func appendMapStringString(b []byte, m map[string]string) []byte {
-	if m == nil {
+// bindMapStringString binds the hstore text form as a string. Postgres
+// coerces a text parameter to hstore; pgx has no fixed OID for it.
+func bindMapStringString(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
+	if v.IsNil() {
 		return dialect.AppendNull(b)
 	}
+	m := v.Convert(mapStringStringType).Interface().(map[string]string)
+	return gen.Bind(b, hstoreText(m))
+}
 
-	b = append(b, '\'')
-
+// hstoreText renders m in hstore input syntax: "k"=>"v",... with quotes and
+// backslashes escaped by a backslash.
+func hstoreText(m map[string]string) string {
+	var b []byte
 	for key, value := range m {
 		b = appendStringElem(b, key)
 		b = append(b, '=', '>')
@@ -73,15 +68,7 @@ func appendMapStringString(b []byte, m map[string]string) []byte {
 		b = append(b, ',')
 	}
 	if len(m) > 0 {
-		b = b[:len(b)-1] // Strip trailing comma.
+		b = b[:len(b)-1]
 	}
-
-	b = append(b, '\'')
-
-	return b
-}
-
-func appendMapStringStringValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	m := v.Convert(mapStringStringType).Interface().(map[string]string)
-	return appendMapStringString(b, m)
+	return string(b)
 }

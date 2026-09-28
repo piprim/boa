@@ -1,1 +1,2 @@
-INSERT INTO "models" AS "model" ("id", "str") VALUES (DEFAULT, '') ON CONFLICT DO NOTHING RETURNING "id"
+INSERT INTO "models" AS "model" ("id", "str") VALUES (DEFAULT, $1) ON CONFLICT DO NOTHING RETURNING "id"
+-- args: []interface {}{""}

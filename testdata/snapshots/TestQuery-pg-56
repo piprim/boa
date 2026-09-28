@@ -1,1 +1,2 @@
-INSERT INTO "models" AS "model" ("id", "str") VALUES (42, 'hello'), (43, 'world') ON DUPLICATE KEY UPDATE SET str = upper(str)
+INSERT INTO "models" AS "model" ("id", "str") VALUES ($1, $2), ($3, $4) ON DUPLICATE KEY UPDATE SET str = upper(str)
+-- args: []interface {}{42, "hello", 43, "world"}

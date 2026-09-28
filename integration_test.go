@@ -2,7 +2,9 @@ package pgcrud_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"net"
 	"os"
 	"testing"
 	"time"
@@ -13,9 +15,30 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/piprim/pgcrud"
+	"github.com/piprim/pgcrud/dialect/pgdialect"
 )
 
 const schemaSQL = `
+CREATE EXTENSION IF NOT EXISTS hstore;
+DROP TABLE IF EXISTS kitchen;
+CREATE TABLE kitchen (
+	id         bigserial PRIMARY KEY,
+	tags       text[],
+	nums       bigint[],
+	doc        jsonb,
+	attrs      hstore,
+	span       int8range,
+	period     tstzrange,
+	addr       inet,
+	blob       bytea,
+	packed     bytea,
+	label      text,
+	rank       int4,
+	ratio      float8,
+	ok         boolean,
+	at         timestamptz,
+	nullable   text
+);
 DROP TABLE IF EXISTS story_tags, tags, comments, stories, authors CASCADE;
 
 CREATE TABLE authors (
@@ -78,6 +101,28 @@ type Comment struct {
 type Tag struct {
 	ID   int64 `bun:",pk,autoincrement"`
 	Name string
+}
+
+// Kitchen holds one column of every value type the bind mapping covers.
+type Kitchen struct {
+	pgcrud.BaseModel `bun:"table:kitchen"`
+
+	ID       int64             `bun:",pk,autoincrement"`
+	Tags     []string          `bun:",array"`
+	Nums     []int64           `bun:",array"`
+	Doc      map[string]any    `bun:",type:jsonb"`
+	Attrs    map[string]string `bun:",hstore"`
+	Span     pgdialect.Range[int64]
+	Period   pgdialect.Range[time.Time]
+	Addr     net.IP
+	Blob     []byte
+	Packed   map[string]int `bun:",msgpack"`
+	Label    string
+	Rank     int32
+	Ratio    float64
+	OK       bool `bun:"ok"`
+	At       time.Time
+	Nullable sql.NullString
 }
 
 type StoryTag struct {

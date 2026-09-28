@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"database/sql/driver"
 	"reflect"
 	"strconv"
 	"strings"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/piprim/pgcrud/dialect"
 	"github.com/piprim/pgcrud/dialect/feature"
-	"github.com/piprim/pgcrud/internal"
 	"github.com/piprim/pgcrud/internal/parser"
 )
 
@@ -19,6 +19,7 @@ var nopQueryGen = QueryGen{
 type QueryGen struct {
 	dialect Dialect
 	args    *namedArgList
+	bound   *ArgList
 }
 
 func NewQueryGen(dialect Dialect) QueryGen {
@@ -43,48 +44,27 @@ func (f QueryGen) IdentQuote() byte {
 	return f.dialect.IdentQuote()
 }
 
-// guardLineComment inserts a space when a negative numeric literal is about to
-// be appended immediately after a '-'. Without it, formatting an expression
-// such as "col - ?" with a negative argument produces "col --1", where the "--"
-// starts a SQL line comment that can be abused for SQL injection. This mirrors
-// the fix applied to driver/pgdriver (CVE-2024-44906).
-func guardLineComment(b []byte, negative bool) []byte {
-	if negative && len(b) > 0 && b[len(b)-1] == '-' {
-		return append(b, ' ')
-	}
-	return b
-}
-
+// Append writes v into b as a bound parameter, or inline when v is a SQL
+// fragment (QueryAppender) or nil.
 func (gen QueryGen) Append(b []byte, v any) []byte {
 	switch v := v.(type) {
 	case nil:
 		return dialect.AppendNull(b)
-	case bool:
-		return gen.Dialect().AppendBool(b, v)
-	case int:
-		return strconv.AppendInt(guardLineComment(b, v < 0), int64(v), 10)
-	case int32:
-		return strconv.AppendInt(guardLineComment(b, v < 0), int64(v), 10)
-	case int64:
-		return strconv.AppendInt(guardLineComment(b, v < 0), v, 10)
-	case uint:
-		return strconv.AppendInt(b, int64(v), 10)
-	case uint32:
-		return gen.Dialect().AppendUint32(b, v)
-	case uint64:
-		return gen.Dialect().AppendUint64(b, v)
-	case float32:
-		return dialect.AppendFloat32(guardLineComment(b, v < 0), v)
-	case float64:
-		return dialect.AppendFloat64(guardLineComment(b, v < 0), v)
-	case string:
-		return gen.Dialect().AppendString(b, v)
-	case time.Time:
-		return gen.Dialect().AppendTime(b, v)
-	case []byte:
-		return gen.Dialect().AppendBytes(b, v)
 	case QueryAppender:
 		return AppendQueryAppender(gen, b, v)
+	case uint32:
+		return bindUint(gen, b, uint64(v), 32)
+	case uint64:
+		return bindUint(gen, b, v, 64)
+	case driver.Valuer:
+		// A typed nil pointer satisfies the interface; it means NULL.
+		if rv := reflect.ValueOf(v); rv.Kind() == reflect.Pointer && rv.IsNil() {
+			return dialect.AppendNull(b)
+		}
+		return gen.Bind(b, v)
+	case bool, int, int8, int16, int32, int64, uint, uint8, uint16,
+		float32, float64, string, time.Time, []byte:
+		return gen.Bind(b, v)
 	default:
 		vv := reflect.ValueOf(v)
 		if vv.Kind() == reflect.Pointer && vv.IsNil() {
@@ -119,6 +99,7 @@ func (f QueryGen) WithArg(arg NamedArgAppender) QueryGen {
 	return QueryGen{
 		dialect: f.dialect,
 		args:    f.args.WithArg(arg),
+		bound:   f.bound,
 	}
 }
 
@@ -126,14 +107,8 @@ func (f QueryGen) WithNamedArg(name string, value any) QueryGen {
 	return QueryGen{
 		dialect: f.dialect,
 		args:    f.args.WithArg(&namedArg{name: name, value: value}),
+		bound:   f.bound,
 	}
-}
-
-func (f QueryGen) FormatQuery(query string, args ...any) string {
-	if f.IsNop() || (args == nil && f.args == nil) || strings.IndexByte(query, '?') == -1 {
-		return query
-	}
-	return internal.String(f.AppendQuery(nil, query, args...))
 }
 
 func (f QueryGen) AppendQuery(dst []byte, query string, args ...any) []byte {
@@ -220,7 +195,7 @@ func (gen QueryGen) appendArg(b []byte, arg any) []byte {
 	case QueryAppender:
 		bb, err := arg.AppendQuery(gen, b)
 		if err != nil {
-			return dialect.AppendError(b, err)
+			return gen.BindError(b, err)
 		}
 		return bb
 	default:

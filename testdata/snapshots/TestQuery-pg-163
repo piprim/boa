@@ -1,1 +1,2 @@
-UPDATE "stories" AS "story" SET name = 'new-name' JOIN user ON user.id = story.user_id WHERE (user.id = 1)
+UPDATE "stories" AS "story" SET name = $1 JOIN user ON user.id = story.user_id WHERE (user.id = $2)
+-- args: []interface {}{"new-name", 1}

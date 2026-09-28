@@ -1,1 +1,2 @@
 SELECT "id", "str" FROM "models" AS "model"
+-- args: []interface {}{}

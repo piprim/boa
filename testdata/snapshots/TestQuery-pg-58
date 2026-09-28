@@ -1,1 +1,2 @@
 INSERT INTO "models" ("raw") VALUES (NULL)
+-- args: []interface {}{}

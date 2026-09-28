@@ -1,1 +1,2 @@
-INSERT INTO "models" ("id", "str", "foo") VALUES (DEFAULT, '', 'bar') RETURNING "id"
+INSERT INTO "models" ("id", "str", "foo") VALUES (DEFAULT, $1, $2) RETURNING "id"
+-- args: []interface {}{"", "bar"}

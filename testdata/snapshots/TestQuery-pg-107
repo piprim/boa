@@ -1,1 +1,2 @@
-INSERT INTO "models" ("id", "str", "extra") VALUES (42, 'hello', 'custom'), (43, 'foo', 'custom')
+INSERT INTO "models" ("id", "str", "extra") VALUES ($1, $2, $3), ($4, $5, $6)
+-- args: []interface {}{42, "hello", "custom", 43, "foo", "custom"}

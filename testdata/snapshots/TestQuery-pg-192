@@ -1,1 +1,2 @@
-INSERT INTO "models" AS "model" ("name") VALUES ('name1') ON CONFLICT DO UPDATE SET "bar" = NULL, "foo" = 'string'
+INSERT INTO "models" AS "model" ("name") VALUES ($1) ON CONFLICT DO UPDATE SET "bar" = NULL, "foo" = $2
+-- args: []interface {}{"name1", "string"}

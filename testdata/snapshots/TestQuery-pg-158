@@ -1,1 +1,2 @@
 UPDATE xxx SET foo = NULL WHERE (1)
+-- args: []interface {}{}

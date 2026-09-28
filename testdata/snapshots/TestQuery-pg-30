@@ -1,1 +1,2 @@
-WITH "src" ("id", "str") AS (VALUES (42, 'hello'), (43, 'world')) UPDATE "dest" SET dest.str = src.str FROM "src" WHERE (dest.id = src.id)
+WITH "src" ("id", "str") AS (VALUES ($1::BIGINT, $2::VARCHAR), ($3::BIGINT, $4::VARCHAR)) UPDATE "dest" SET dest.str = src.str FROM "src" WHERE (dest.id = src.id)
+-- args: []interface {}{42, "hello", 43, "world"}

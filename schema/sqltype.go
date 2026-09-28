@@ -108,7 +108,7 @@ func (tm NullTime) AppendQuery(gen QueryGen, b []byte) ([]byte, error) {
 	if tm.IsZero() {
 		return dialect.AppendNull(b), nil
 	}
-	return gen.Dialect().AppendTime(b, tm.Time), nil
+	return gen.Bind(b, tm.Time), nil
 }
 
 func (tm *NullTime) Scan(src any) error {

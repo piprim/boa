@@ -1,1 +1,2 @@
-SELECT * WHERE (name IN ('foo', 'bar'))
+SELECT * WHERE (name IN ($1, $2))
+-- args: []interface {}{"foo", "bar"}

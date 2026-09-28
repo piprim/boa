@@ -1,1 +1,2 @@
-SELECT * WHERE (x IN ('\x666f6f', '\x626172'))
+SELECT * WHERE (x IN ($1, $2))
+-- args: []interface {}{[]uint8{0x66, 0x6f, 0x6f}, []uint8{0x62, 0x61, 0x72}}

@@ -1,1 +1,2 @@
-SELECT * WHERE (id IN (1, 2, 3))
+SELECT * WHERE (id IN ($1, $2, $3))
+-- args: []interface {}{1, 2, 3}

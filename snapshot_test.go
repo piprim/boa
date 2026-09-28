@@ -13,7 +13,8 @@ import (
 var updateSnapshots = flag.Bool("update", false, "rewrite golden files under testdata/snapshots")
 
 // assertSnapshot compares got with testdata/snapshots/<TestName with / as ->.
-// Files hold the value followed by one newline, the format bun's suite used.
+// Files hold the SQL, a newline, `-- args: <%#v of the bound values>` and one
+// trailing newline.
 func assertSnapshot(t *testing.T, got string) {
 	t.Helper()
 	name := strings.ReplaceAll(t.Name(), "/", "-")

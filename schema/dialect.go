@@ -1,21 +1,9 @@
 package schema
 
 import (
-	"encoding/hex"
-	"errors"
-	"strconv"
-	"time"
-	"unicode/utf8"
-
 	"github.com/piprim/pgcrud/dialect"
 	"github.com/piprim/pgcrud/dialect/feature"
-	"github.com/piprim/pgcrud/internal/parser"
 )
-
-// errStringNul is reported when a string value contains a NUL byte (0x00).
-// Silently stripping it (the previous behavior) would store a value different
-// from the one the caller supplied; PostgreSQL rejects NUL in text outright.
-var errStringNul = errors.New("pgcrud: string contains a NUL byte (0x00)")
 
 type Dialect interface {
 	Name() dialect.Name
@@ -25,14 +13,6 @@ type Dialect interface {
 	OnTable(table *Table)
 
 	IdentQuote() byte
-
-	AppendUint32(b []byte, n uint32) []byte
-	AppendUint64(b []byte, n uint64) []byte
-	AppendTime(b []byte, tm time.Time) []byte
-	AppendString(b []byte, s string) []byte
-	AppendBytes(b []byte, bs []byte) []byte
-	AppendJSON(b, jsonb []byte) []byte
-	AppendBool(b []byte, v bool) []byte
 
 	// AppendSequence adds the appropriate instruction for the driver to create a sequence
 	// from which (autoincremented) values for the column will be generated.
@@ -49,111 +29,7 @@ type Dialect interface {
 
 // ------------------------------------------------------------------------------
 
-type BaseDialect struct{}
-
-func (BaseDialect) AppendUint32(b []byte, n uint32) []byte {
-	return strconv.AppendUint(b, uint64(n), 10)
-}
-
-func (BaseDialect) AppendUint64(b []byte, n uint64) []byte {
-	return strconv.AppendUint(b, n, 10)
-}
-
-func (BaseDialect) AppendTime(b []byte, tm time.Time) []byte {
-	b = append(b, '\'')
-	b = tm.UTC().AppendFormat(b, "2006-01-02 15:04:05.999999-07:00")
-	b = append(b, '\'')
-	return b
-}
-
-func (BaseDialect) AppendString(b []byte, s string) []byte {
-	b = append(b, '\'')
-	for _, r := range s {
-		if r == '\000' {
-			// Fail closed instead of silently dropping the NUL, which would
-			// persist a value different from the one that was validated.
-			return dialect.AppendError(b, errStringNul)
-		}
-
-		if r == '\'' {
-			b = append(b, '\'', '\'')
-			continue
-		}
-
-		if r < utf8.RuneSelf {
-			b = append(b, byte(r))
-			continue
-		}
-
-		l := len(b)
-		if cap(b)-l < utf8.UTFMax {
-			b = append(b, make([]byte, utf8.UTFMax)...)
-		}
-		n := utf8.EncodeRune(b[l:l+utf8.UTFMax], r)
-		b = b[:l+n]
-	}
-	b = append(b, '\'')
-	return b
-}
-
-func (BaseDialect) AppendBytes(b, bs []byte) []byte {
-	if bs == nil {
-		return dialect.AppendNull(b)
-	}
-
-	b = append(b, `'\x`...)
-
-	s := len(b)
-	b = append(b, make([]byte, hex.EncodedLen(len(bs)))...)
-	hex.Encode(b[s:], bs)
-
-	b = append(b, '\'')
-
-	return b
-}
-
-func (BaseDialect) AppendJSON(b, jsonb []byte) []byte {
-	b = append(b, '\'')
-
-	p := parser.New(jsonb)
-	for p.Valid() {
-		c := p.Read()
-		switch c {
-		case '"':
-			b = append(b, '"')
-		case '\'':
-			b = append(b, "''"...)
-		case '\000':
-			continue
-		case '\\':
-			if p.CutPrefix([]byte("u0000")) {
-				b = append(b, `\\u0000`...)
-			} else {
-				// Emit the backslash but do NOT consume the next byte here: let
-				// the loop escape it. Consuming it raw bypassed the '' quote
-				// doubling, so a "\'" byte pair produced an un-doubled quote that
-				// could break out of the SQL string literal.
-				b = append(b, '\\')
-			}
-		default:
-			b = append(b, c)
-		}
-	}
-
-	b = append(b, '\'')
-
-	return b
-}
-
-func (BaseDialect) AppendBool(b []byte, v bool) []byte {
-	return dialect.AppendBool(b, v)
-}
-
-// ------------------------------------------------------------------------------
-
 type nopDialect struct {
-	BaseDialect
-
 	tables   *Tables
 	features feature.Feature
 }

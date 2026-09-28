@@ -1,1 +1,2 @@
-INSERT INTO "models" ("bytes") VALUES ('\x00000000000000000000')
+INSERT INTO "models" ("bytes") VALUES ($1)
+-- args: []interface {}{[]uint8{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}}

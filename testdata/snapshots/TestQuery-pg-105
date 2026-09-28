@@ -1,1 +1,2 @@
-INSERT INTO "models" ("id") VALUES ('embed')
+INSERT INTO "models" ("id") VALUES ($1)
+-- args: []interface {}{"embed"}

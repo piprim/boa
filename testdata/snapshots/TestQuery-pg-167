@@ -1,1 +1,2 @@
-INSERT INTO "table" ("default") VALUES (FALSE)
+INSERT INTO "table" ("default") VALUES ($1)
+-- args: []interface {}{false}

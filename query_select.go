@@ -12,7 +12,6 @@ import (
 
 	"github.com/piprim/pgcrud/dialect"
 
-	"github.com/piprim/pgcrud/internal"
 	"github.com/piprim/pgcrud/schema"
 )
 
@@ -770,7 +769,9 @@ func (q *SelectQuery) appendColumns(gen schema.QueryGen, b []byte) (_ []byte, er
 		if len(q.table.Fields) > 10 && gen.IsNop() {
 			b = append(b, q.table.SQLAlias...)
 			b = append(b, '.')
-			b = gen.Dialect().AppendString(b, fmt.Sprintf("%d columns", len(q.table.Fields)))
+			b = append(b, '\'')
+			b = fmt.Appendf(b, "%d columns", len(q.table.Fields))
+			b = append(b, '\'')
 		} else {
 			b = appendColumns(b, q.table.SQLAlias, q.table.Fields)
 		}
@@ -865,19 +866,17 @@ func (q *SelectQuery) Rows(ctx context.Context) (pgx.Rows, error) {
 	// if a comment is propagated via the context, use it
 	setCommentFromContext(ctx, q)
 
-	queryBytes, err := q.AppendQuery(q.db.gen, q.db.makeQueryBytes())
+	query, args, err := q.build(q)
 	if err != nil {
-		return nil, err
+		return nil, q.db.failBuild(ctx, q, q.model, err)
 	}
 
-	query := internal.String(queryBytes)
-
-	ctx, event := q.db.beforeQuery(ctx, q, query, nil, query, q.model)
+	ctx, event := q.db.beforeQuery(ctx, q, query, args, q.model)
 
 	var rows pgx.Rows
 	exec, err := q.resolveExecutor(ctx, q, query)
 	if err == nil {
-		rows, err = exec.Query(ctx, query, pgx.QueryExecModeSimpleProtocol)
+		rows, err = exec.Query(ctx, query, q.db.queryArgs(args)...)
 	}
 
 	q.db.afterQuery(ctx, event, pgconn.CommandTag{}, err)
@@ -896,12 +895,10 @@ func (q *SelectQuery) Exec(ctx context.Context, dest ...any) (res pgconn.Command
 	// if a comment is propagated via the context, use it
 	setCommentFromContext(ctx, q)
 
-	queryBytes, err := q.AppendQuery(q.db.gen, q.db.makeQueryBytes())
+	query, args, err := q.build(q)
 	if err != nil {
-		return pgconn.CommandTag{}, err
+		return pgconn.CommandTag{}, q.db.failBuild(ctx, q, q.model, err)
 	}
-
-	query := internal.String(queryBytes)
 
 	if len(dest) > 0 {
 		model, err := q.getModel(dest)
@@ -909,12 +906,12 @@ func (q *SelectQuery) Exec(ctx context.Context, dest ...any) (res pgconn.Command
 			return pgconn.CommandTag{}, err
 		}
 
-		res, err = q.scan(ctx, q, query, model, true)
+		res, err = q.scan(ctx, q, query, args, model, true)
 		if err != nil {
 			return pgconn.CommandTag{}, err
 		}
 	} else {
-		res, err = q.exec(ctx, q, query)
+		res, err = q.exec(ctx, q, query, args)
 		if err != nil {
 			return pgconn.CommandTag{}, err
 		}
@@ -960,14 +957,12 @@ func (q *SelectQuery) scanResult(ctx context.Context, dest ...any) (pgconn.Comma
 	// if a comment is propagated via the context, use it
 	setCommentFromContext(ctx, q)
 
-	queryBytes, err := q.AppendQuery(q.db.gen, q.db.makeQueryBytes())
+	query, args, err := q.build(q)
 	if err != nil {
-		return pgconn.CommandTag{}, err
+		return pgconn.CommandTag{}, q.db.failBuild(ctx, q, q.model, err)
 	}
 
-	query := internal.String(queryBytes)
-
-	res, err := q.scan(ctx, q, query, model, true)
+	res, err := q.scan(ctx, q, query, args, model, true)
 	if err != nil {
 		return pgconn.CommandTag{}, err
 	}
@@ -1018,18 +1013,16 @@ func (q *SelectQuery) Count(ctx context.Context) (int64, error) {
 
 	qq := countQuery{q}
 
-	queryBytes, err := qq.AppendQuery(q.db.gen, nil)
+	query, args, err := q.build(qq)
 	if err != nil {
-		return 0, err
+		return 0, q.db.failBuild(ctx, qq, q.model, err)
 	}
-
-	query := internal.String(queryBytes)
-	ctx, event := q.db.beforeQuery(ctx, qq, query, nil, query, q.model)
+	ctx, event := q.db.beforeQuery(ctx, qq, query, args, q.model)
 
 	var num int64
 	exec, err := q.resolveExecutor(ctx, qq, query)
 	if err == nil {
-		err = exec.QueryRow(ctx, query, pgx.QueryExecModeSimpleProtocol).Scan(&num)
+		err = exec.QueryRow(ctx, query, q.db.queryArgs(args)...).Scan(&num)
 	}
 
 	q.db.afterQuery(ctx, event, pgconn.CommandTag{}, err)
@@ -1137,18 +1130,16 @@ func (q *SelectQuery) selectExists(ctx context.Context) (bool, error) {
 
 	qq := selectExistsQuery{q}
 
-	queryBytes, err := qq.AppendQuery(q.db.gen, nil)
+	query, args, err := q.build(qq)
 	if err != nil {
-		return false, err
+		return false, q.db.failBuild(ctx, qq, q.model, err)
 	}
-
-	query := internal.String(queryBytes)
-	ctx, event := q.db.beforeQuery(ctx, qq, query, nil, query, q.model)
+	ctx, event := q.db.beforeQuery(ctx, qq, query, args, q.model)
 
 	var exists bool
 	exec, err := q.resolveExecutor(ctx, qq, query)
 	if err == nil {
-		err = exec.QueryRow(ctx, query, pgx.QueryExecModeSimpleProtocol).Scan(&exists)
+		err = exec.QueryRow(ctx, query, q.db.queryArgs(args)...).Scan(&exists)
 	}
 
 	q.db.afterQuery(ctx, event, pgconn.CommandTag{}, err)
@@ -1156,14 +1147,30 @@ func (q *SelectQuery) selectExists(ctx context.Context) (bool, error) {
 	return exists, err
 }
 
-// String returns the generated SQL query string. The SelectQuery instance must not be
-// modified during query generation to ensure multiple calls to String() return identical results.
+// Build renders the query and returns the SQL with $n placeholders together
+// with the values bound to them. The query must not be modified while
+// rendering, so repeated calls return identical results.
+func (q *SelectQuery) Build() (string, []any, error) {
+	return q.db.build(q)
+}
+
+// String returns the SQL with $n placeholders. It panics on a render error.
 func (q *SelectQuery) String() string {
-	buf, err := q.AppendQuery(q.db.QueryGen(), nil)
+	sql, _, err := q.Build()
 	if err != nil {
 		panic(err)
 	}
-	return string(buf)
+	return sql
+}
+
+// Args returns the values bound to the placeholders of String. It panics on
+// a render error.
+func (q *SelectQuery) Args() []any {
+	_, args, err := q.Build()
+	if err != nil {
+		panic(err)
+	}
+	return args
 }
 
 // Clone creates a deep copy of the SelectQuery.

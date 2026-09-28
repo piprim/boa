@@ -1,1 +1,2 @@
-INSERT INTO "models" AS "model" ("id", "str") VALUES (42, 'hello'), (43, 'world') ON CONFLICT DO NOTHING
+INSERT INTO "models" AS "model" ("id", "str") VALUES ($1, $2), ($3, $4) ON CONFLICT DO NOTHING
+-- args: []interface {}{42, "hello", 43, "world"}

@@ -514,9 +514,9 @@ func (q *UpdateQuery) scanOrExec(
 	setCommentFromContext(ctx, q)
 
 	// Generate the query before checking hasReturning.
-	queryBytes, err := q.AppendQuery(q.db.gen, q.db.makeQueryBytes())
+	query, args, err := q.build(q)
 	if err != nil {
-		return pgconn.CommandTag{}, err
+		return pgconn.CommandTag{}, q.db.failBuild(ctx, q, q.model, err)
 	}
 
 	useScan := hasDest || (q.hasReturning() && q.hasFeature(feature.Returning|feature.Output))
@@ -530,17 +530,15 @@ func (q *UpdateQuery) scanOrExec(
 		}
 	}
 
-	query := internal.String(queryBytes)
-
 	var res pgconn.CommandTag
 
 	if useScan {
-		res, err = q.scan(ctx, q, query, model, hasDest)
+		res, err = q.scan(ctx, q, query, args, model, hasDest)
 		if err != nil {
 			return pgconn.CommandTag{}, err
 		}
 	} else {
-		res, err = q.exec(ctx, q, query)
+		res, err = q.exec(ctx, q, query, args)
 		if err != nil {
 			return pgconn.CommandTag{}, err
 		}
@@ -589,14 +587,30 @@ func (q *UpdateQuery) hasTableAlias(gen schema.QueryGen) bool {
 	return gen.HasFeature(feature.UpdateMultiTable | feature.UpdateTableAlias)
 }
 
-// String returns the generated SQL query string. The UpdateQuery instance must not be
-// modified during query generation to ensure multiple calls to String() return identical results.
+// Build renders the query and returns the SQL with $n placeholders together
+// with the values bound to them. The query must not be modified while
+// rendering, so repeated calls return identical results.
+func (q *UpdateQuery) Build() (string, []any, error) {
+	return q.db.build(q)
+}
+
+// String returns the SQL with $n placeholders. It panics on a render error.
 func (q *UpdateQuery) String() string {
-	buf, err := q.AppendQuery(q.db.QueryGen(), nil)
+	sql, _, err := q.Build()
 	if err != nil {
 		panic(err)
 	}
-	return string(buf)
+	return sql
+}
+
+// Args returns the values bound to the placeholders of String. It panics on
+// a render error.
+func (q *UpdateQuery) Args() []any {
+	_, args, err := q.Build()
+	if err != nil {
+		panic(err)
+	}
+	return args
 }
 
 //------------------------------------------------------------------------------

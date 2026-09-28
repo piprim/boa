@@ -1,1 +1,2 @@
-/* test */ UPDATE "models" AS "model" SET name = 'new-name' WHERE (id = 1)
+/* test */ UPDATE "models" AS "model" SET name = $1 WHERE (id = $2)
+-- args: []interface {}{"new-name", 1}

@@ -1,1 +1,2 @@
 WITH "foo" AS (SELECT "model"."id", "model"."str" FROM "models" AS "model") SELECT * FROM "foo"
+-- args: []interface {}{}

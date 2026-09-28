@@ -1,7 +1,6 @@
 package pgdialect
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/piprim/pgcrud/dialect"
@@ -13,8 +12,6 @@ import (
 var pgDialect = New()
 
 type Dialect struct {
-	schema.BaseDialect
-
 	tables    *schema.Tables
 	features  feature.Feature
 	uintAsInt bool
@@ -124,18 +121,10 @@ func (d *Dialect) IdentQuote() byte {
 	return '"'
 }
 
-func (d *Dialect) AppendUint32(b []byte, n uint32) []byte {
-	if d.uintAsInt {
-		return strconv.AppendInt(b, int64(int32(n)), 10)
-	}
-	return strconv.AppendUint(b, uint64(n), 10)
-}
-
-func (d *Dialect) AppendUint64(b []byte, n uint64) []byte {
-	if d.uintAsInt {
-		return strconv.AppendInt(b, int64(n), 10)
-	}
-	return strconv.AppendUint(b, n, 10)
+// UintAsInt reports whether WithAppendUintAsInt is on: unsigned values are
+// bound as the signed type of the same width, wrapping on overflow.
+func (d *Dialect) UintAsInt() bool {
+	return d.uintAsInt
 }
 
 func (d *Dialect) AppendSequence(b []byte, _ *schema.Table, _ *schema.Field) []byte {

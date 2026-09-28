@@ -1,1 +1,2 @@
 SELECT * ORDER BY "foo" ASC, "foo"."bar" DESC, "xxx" 
+-- args: []interface {}{}

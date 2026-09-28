@@ -2,7 +2,9 @@ package pgcrud
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/piprim/pgcrud/dialect/feature"
@@ -73,21 +75,19 @@ func (j *relationJoin) manyQueryCompositeIn(where []byte, q *SelectQuery) *Selec
 	if len(j.Relation.JoinPKs) > 1 {
 		where = append(where, ')')
 	}
-	where = append(where, " IN ("...)
-	where = appendChildValues(
-		q.db.QueryGen(),
-		where,
-		j.JoinModel.rootValue(),
-		j.JoinModel.parentIndex(),
-		j.Relation.BasePKs,
-	)
-	where = append(where, ")"...)
-	if len(j.additionalJoinOnConditions) > 0 {
-		where = append(where, " AND "...)
-		where = appendAdditionalJoinOnConditions(q.db.QueryGen(), where, j.additionalJoinOnConditions)
-	}
+	where = append(where, " IN (?)"...)
 
-	q = q.Where(internal.String(where))
+	values := childValues{
+		root:   j.JoinModel.rootValue(),
+		index:  j.JoinModel.parentIndex(),
+		fields: j.Relation.BasePKs,
+	}
+	if len(j.additionalJoinOnConditions) > 0 {
+		where = append(where, " AND ?"...)
+		q = q.Where(internal.String(where), values, joinConditions(j.additionalJoinOnConditions))
+	} else {
+		q = q.Where(internal.String(where), values)
+	}
 
 	if j.Relation.PolymorphicField != nil {
 		q = q.Where("? = ?", j.Relation.PolymorphicField.SQLName, j.Relation.PolymorphicValue)
@@ -99,21 +99,17 @@ func (j *relationJoin) manyQueryCompositeIn(where []byte, q *SelectQuery) *Selec
 	return q
 }
 
-func (j *relationJoin) manyQueryMulti(where []byte, q *SelectQuery) *SelectQuery {
-	where = appendMultiValues(
-		q.db.QueryGen(),
-		where,
-		j.JoinModel.rootValue(),
-		j.JoinModel.parentIndex(),
-		j.Relation.BasePKs,
-		j.Relation.JoinPKs,
-		j.JoinModel.Table().SQLAlias,
-	)
-
-	q = q.Where(internal.String(where))
+func (j *relationJoin) manyQueryMulti(_ []byte, q *SelectQuery) *SelectQuery {
+	q = q.Where("?", multiValues{
+		root:       j.JoinModel.rootValue(),
+		index:      j.JoinModel.parentIndex(),
+		baseFields: j.Relation.BasePKs,
+		joinFields: j.Relation.JoinPKs,
+		joinTable:  j.JoinModel.Table().SQLAlias,
+	})
 
 	if len(j.additionalJoinOnConditions) > 0 {
-		q = q.Where(internal.String(appendAdditionalJoinOnConditions(q.db.QueryGen(), []byte{}, j.additionalJoinOnConditions)))
+		q = q.Where("?", joinConditions(j.additionalJoinOnConditions))
 	}
 
 	if j.Relation.PolymorphicField != nil {
@@ -127,37 +123,23 @@ func (j *relationJoin) manyQueryMulti(where []byte, q *SelectQuery) *SelectQuery
 }
 
 func (j *relationJoin) hasManyColumns(q *SelectQuery) *SelectQuery {
-	b := make([]byte, 0, 32)
-
 	joinTable := j.JoinModel.Table()
-	if len(j.columns) > 0 {
-		for i, col := range j.columns {
-			if i > 0 {
-				b = append(b, ", "...)
-			}
-
-			if col.Args == nil {
-				if field, ok := joinTable.FieldMap[col.Query]; ok {
-					b = append(b, joinTable.SQLAlias...)
-					b = append(b, '.')
-					b = append(b, field.SQLName...)
-					continue
-				}
-			}
-
-			var err error
-			b, err = col.AppendQuery(q.db.gen, b)
-			if err != nil {
-				q.setErr(err)
-				return q
-			}
-
-		}
-	} else {
-		b = appendColumns(b, joinTable.SQLAlias, joinTable.Fields)
+	if len(j.columns) == 0 {
+		b := appendColumns(nil, joinTable.SQLAlias, joinTable.Fields)
+		return q.ColumnExpr(internal.String(b))
 	}
 
-	q = q.ColumnExpr(internal.String(b))
+	for _, col := range j.columns {
+		if col.Args == nil {
+			if field, ok := joinTable.FieldMap[col.Query]; ok {
+				b := append([]byte(joinTable.SQLAlias), '.')
+				b = append(b, field.SQLName...)
+				q = q.ColumnExpr(internal.String(b))
+				continue
+			}
+		}
+		q = q.ColumnExpr("?", col)
+	}
 
 	return q
 }
@@ -191,7 +173,6 @@ func (j *relationJoin) m2mQuery(q *SelectQuery) *SelectQuery {
 		q = q.ColumnExpr(internal.String(b))
 	}
 
-	//nolint
 	var join []byte
 	join = append(join, "JOIN "...)
 	join = gen.AppendQuery(join, string(j.Relation.M2MTable.SQLName))
@@ -206,16 +187,15 @@ func (j *relationJoin) m2mQuery(q *SelectQuery) *SelectQuery {
 		join = append(join, '.')
 		join = append(join, col.SQLName...)
 	}
-	join = append(join, ") IN ("...)
-	join = appendChildValues(gen, join, j.BaseModel.rootValue(), index, j.Relation.BasePKs)
-	join = append(join, ")"...)
+	join = append(join, ") IN (?)"...)
 
+	values := childValues{root: j.BaseModel.rootValue(), index: index, fields: j.Relation.BasePKs}
 	if len(j.additionalJoinOnConditions) > 0 {
-		join = append(join, " AND "...)
-		join = appendAdditionalJoinOnConditions(gen, join, j.additionalJoinOnConditions)
+		join = append(join, " AND ?"...)
+		q = q.Join(internal.String(join), values, joinConditions(j.additionalJoinOnConditions))
+	} else {
+		q = q.Join(internal.String(join), values)
 	}
-
-	q = q.Join(internal.String(join))
 
 	joinTable := j.JoinModel.Table()
 	for i, m2mJoinField := range j.Relation.M2MJoinPKs {
@@ -293,7 +273,7 @@ func (j *relationJoin) appendSoftDelete(
 		} else {
 			b = append(b, " = "...)
 		}
-		b = gen.Dialect().AppendTime(b, time.Time{})
+		b = gen.Bind(b, time.Time{})
 	}
 
 	return b
@@ -343,105 +323,129 @@ func (j *relationJoin) appendHasOneJoin(
 
 	if len(j.additionalJoinOnConditions) > 0 {
 		b = append(b, " AND "...)
-		b = appendAdditionalJoinOnConditions(gen, b, j.additionalJoinOnConditions)
+		b, err = joinConditions(j.additionalJoinOnConditions).AppendQuery(gen, b)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return b, nil
 }
 
-func appendChildValues(
-	gen schema.QueryGen, b []byte, v reflect.Value, index []int, fields []*schema.Field,
-) []byte {
-	seen := make(map[string]struct{})
-	walk(v, index, func(v reflect.Value) {
-		start := len(b)
+// childValues renders the key values of the parent rows for an IN list, each
+// bound, with duplicate parents listed once.
+type childValues struct {
+	root   reflect.Value
+	index  []int
+	fields []*schema.Field
+}
 
-		if len(fields) > 1 {
+var _ schema.QueryAppender = childValues{}
+
+func (c childValues) AppendQuery(gen schema.QueryGen, b []byte) ([]byte, error) {
+	seen := make(map[string]struct{})
+	first := true
+	walk(c.root, c.index, func(v reflect.Value) {
+		key := childKey(v, c.fields)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+
+		if !first {
+			b = append(b, ", "...)
+		}
+		first = false
+
+		if len(c.fields) > 1 {
 			b = append(b, '(')
 		}
-		for i, f := range fields {
+		for i, f := range c.fields {
 			if i > 0 {
 				b = append(b, ", "...)
 			}
 			b = f.AppendValue(gen, b, v)
 		}
-		if len(fields) > 1 {
+		if len(c.fields) > 1 {
 			b = append(b, ')')
 		}
-		b = append(b, ", "...)
-
-		if _, ok := seen[string(b[start:])]; ok {
-			b = b[:start]
-		} else {
-			seen[string(b[start:])] = struct{}{}
-		}
 	})
-	if len(seen) > 0 {
-		b = b[:len(b)-2] // trim ", "
-	}
-	return b
+	return b, nil
 }
 
-// appendMultiValues is an alternative to appendChildValues that doesn't use the sql keyword ID
-// but instead uses old style ((k1=v1) AND (k2=v2)) OR (...) conditions.
-func appendMultiValues(
-	gen schema.QueryGen, b []byte, v reflect.Value, index []int, baseFields, joinFields []*schema.Field, joinTable schema.Safe,
-) []byte {
-	// This is based on a mix of appendChildValues and query_base.appendColumns
+// childKey identifies one parent row by its key field values, for
+// de-duplication. The rendered SQL cannot serve, since every $n is distinct.
+func childKey(v reflect.Value, fields []*schema.Field) string {
+	var sb strings.Builder
+	for _, f := range fields {
+		fmt.Fprintf(&sb, "%#v|", f.Value(v).Interface())
+	}
+	return sb.String()
+}
 
-	// These should never mismatch in length but nice to know if it does
-	if len(joinFields) != len(baseFields) {
+// multiValues is the alternative to childValues for dialects without a
+// composite IN: ((t.k1 = $1) AND (t.k2 = $2)) OR (...).
+type multiValues struct {
+	root                   reflect.Value
+	index                  []int
+	baseFields, joinFields []*schema.Field
+	joinTable              schema.Safe
+}
+
+var _ schema.QueryAppender = multiValues{}
+
+func (m multiValues) AppendQuery(gen schema.QueryGen, b []byte) ([]byte, error) {
+	if len(m.joinFields) != len(m.baseFields) {
 		panic("not reached")
 	}
 
-	// walk the relations
-	b = append(b, '(')
 	seen := make(map[string]struct{})
-	walk(v, index, func(v reflect.Value) {
-		start := len(b)
-		for i, f := range baseFields {
+	first := true
+	b = append(b, '(')
+	walk(m.root, m.index, func(v reflect.Value) {
+		key := childKey(v, m.baseFields)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+
+		if !first {
+			b = append(b, ") OR ("...)
+		}
+		first = false
+
+		for i, f := range m.baseFields {
 			if i > 0 {
 				b = append(b, " AND "...)
 			}
-			if len(baseFields) > 1 {
+			if len(m.baseFields) > 1 {
 				b = append(b, '(')
 			}
-			// Field name
-			b = append(b, joinTable...)
+			b = append(b, m.joinTable...)
 			b = append(b, '.')
-			b = append(b, []byte(joinFields[i].SQLName)...)
-
-			// Equals value
+			b = append(b, m.joinFields[i].SQLName...)
 			b = append(b, '=')
 			b = f.AppendValue(gen, b, v)
-			if len(baseFields) > 1 {
+			if len(m.baseFields) > 1 {
 				b = append(b, ')')
 			}
 		}
-
-		b = append(b, ") OR ("...)
-
-		if _, ok := seen[string(b[start:])]; ok {
-			b = b[:start]
-		} else {
-			seen[string(b[start:])] = struct{}{}
-		}
 	})
-	if len(seen) > 0 {
-		b = b[:len(b)-6] // trim ") OR ("
-	}
 	b = append(b, ')')
-	return b
+	return b, nil
 }
 
-func appendAdditionalJoinOnConditions(
-	gen schema.QueryGen, b []byte, conditions []schema.QueryWithArgs,
-) []byte {
-	for i, cond := range conditions {
+// joinConditions renders additional join-on conditions joined with AND.
+type joinConditions []schema.QueryWithArgs
+
+var _ schema.QueryAppender = joinConditions(nil)
+
+func (c joinConditions) AppendQuery(gen schema.QueryGen, b []byte) ([]byte, error) {
+	for i, cond := range c {
 		if i > 0 {
 			b = append(b, " AND "...)
 		}
 		b = gen.AppendQuery(b, cond.Query, cond.Args...)
 	}
-	return b
+	return b, nil
 }

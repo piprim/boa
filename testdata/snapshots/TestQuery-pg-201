@@ -1,1 +1,2 @@
 SELECT * WHERE (id IN (NULL))
+-- args: []interface {}{}

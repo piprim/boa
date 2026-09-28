@@ -1,1 +1,2 @@
-INSERT INTO "models" ("id", "slice") VALUES (123, '[]')
+INSERT INTO "models" ("id", "slice") VALUES ($1, $2)
+-- args: []interface {}{123, []uint8{0x5b, 0x5d}}

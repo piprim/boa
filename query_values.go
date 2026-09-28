@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/piprim/pgcrud/dialect/feature"
+	"github.com/piprim/pgcrud/dialect/sqltype"
 	"github.com/piprim/pgcrud/schema"
 )
 
@@ -209,21 +210,21 @@ func (q *ValuesQuery) appendValues(
 		}
 
 		app, ok := q.modelValues[f.Name]
-		if ok {
+		switch {
+		case ok:
 			b, err = app.AppendQuery(gen, b)
 			if err != nil {
 				return nil, err
 			}
-			continue
-		}
-
-		if isTemplate {
+		case isTemplate:
 			b = append(b, '?')
-		} else {
+		default:
 			b = f.AppendValue(gen, b, indirect(strct))
 		}
 
-		if gen.HasFeature(feature.DoubleColonCast) {
+		// The cast is what types the column of a VALUES list, since a bound
+		// value carries no type of its own.
+		if gen.HasFeature(feature.DoubleColonCast) && f.UserSQLType != "" {
 			b = append(b, "::"...)
 			b = append(b, f.UserSQLType...)
 		}
@@ -244,4 +245,44 @@ func (q *ValuesQuery) appendSet(gen schema.QueryGen, b []byte) (_ []byte, err er
 	default:
 		return nil, fmt.Errorf("pgcrud: SetValues(unsupported %T)", model)
 	}
+}
+
+// Build renders the query and returns the SQL with $n placeholders together
+// with the values bound to them. The query must not be modified while
+// rendering, so repeated calls return identical results.
+func (q *ValuesQuery) Build() (string, []any, error) {
+	return q.db.build(q)
+}
+
+// String returns the SQL with $n placeholders. It panics on a render error.
+func (q *ValuesQuery) String() string {
+	sql, _, err := q.Build()
+	if err != nil {
+		panic(err)
+	}
+	return sql
+}
+
+// Args returns the values bound to the placeholders of String. It panics on
+// a render error.
+func (q *ValuesQuery) Args() []any {
+	_, args, err := q.Build()
+	if err != nil {
+		panic(err)
+	}
+	return args
+}
+
+// valuesCast returns the SQL type a VALUES list casts a map value to, derived
+// from the value's Go type, so Postgres can type the column of the list. It
+// is empty when the type is unknown or the value is nil.
+func valuesCast(v any) string {
+	if v == nil {
+		return ""
+	}
+	typ := schema.DiscoverSQLType(reflect.TypeOf(v))
+	if typ == sqltype.Blob {
+		return "BYTEA"
+	}
+	return typ
 }

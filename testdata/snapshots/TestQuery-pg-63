@@ -1,1 +1,2 @@
-UPDATE "models" AS "model" SET "str" = '', foo = 'bar' WHERE ("model"."id" = NULL)
+UPDATE "models" AS "model" SET "str" = $1, foo = $2 WHERE ("model"."id" = NULL)
+-- args: []interface {}{"", "bar"}

@@ -1,1 +1,2 @@
 DELETE FROM "models" AS "model" WHERE ("model"."id" = NULL)
+-- args: []interface {}{}

@@ -2,12 +2,9 @@ package pgdialect
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
-	"math"
 	"reflect"
 	"strconv"
-	"time"
 
 	"github.com/piprim/pgcrud/dialect"
 	"github.com/piprim/pgcrud/internal"
@@ -73,265 +70,26 @@ func (a *ArrayValue) Value() any {
 //------------------------------------------------------------------------------
 
 func (d *Dialect) arrayAppender(typ reflect.Type) schema.AppenderFunc {
-	kind := typ.Kind()
-
-	switch kind {
+	switch typ.Kind() {
 	case reflect.Pointer:
 		if fn := d.arrayAppender(typ.Elem()); fn != nil {
 			return schema.PtrAppender(fn)
 		}
+		return nil
 	case reflect.Slice, reflect.Array:
-		// continue below
+		return bindArrayValue
 	default:
 		return nil
 	}
-
-	elemType := typ.Elem()
-
-	if kind == reflect.Slice {
-		switch elemType {
-		case stringType:
-			return appendStringSliceValue
-		case intType:
-			return appendIntSliceValue
-		case int64Type:
-			return appendInt64SliceValue
-		case float64Type:
-			return appendFloat64SliceValue
-		case timeType:
-			return appendTimeSliceValue
-		}
-	}
-
-	appendElem := d.arrayElemAppender(elemType)
-	if appendElem == nil {
-		panic(fmt.Errorf("pgdialect: %s is not supported", typ))
-	}
-
-	return func(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-		kind := v.Kind()
-		switch kind {
-		case reflect.Pointer, reflect.Slice:
-			if v.IsNil() {
-				return dialect.AppendNull(b)
-			}
-		}
-
-		if kind == reflect.Pointer {
-			v = v.Elem()
-		}
-
-		b = append(b, "'{"...)
-
-		ln := v.Len()
-		for i := 0; i < ln; i++ {
-			elem := v.Index(i)
-			if i > 0 {
-				b = append(b, ',')
-			}
-			b = appendElem(gen, b, elem)
-		}
-
-		b = append(b, "}'"...)
-
-		return b
-	}
 }
 
-func (d *Dialect) arrayElemAppender(typ reflect.Type) schema.AppenderFunc {
-	if typ.Implements(driverValuerType) {
-		return arrayAppendDriverValue
-	}
-	if typ == timeType {
-		return appendTimeElemValue
-	}
-
-	switch typ.Kind() {
-	case reflect.String:
-		return appendStringElemValue
-	case reflect.Slice, reflect.Array:
-		if typ.Elem().Kind() == reflect.Uint8 {
-			return appendBytesElemValue
-		}
-	case reflect.Pointer:
-		return schema.PtrAppender(d.arrayElemAppender(typ.Elem()))
-	}
-	return schema.Appender(d, typ)
-}
-
-func appendTimeElemValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	ts := v.Convert(timeType).Interface().(time.Time)
-
-	b = append(b, '"')
-	b = appendTime(b, ts)
-	return append(b, '"')
-}
-
-func appendStringElemValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	return appendStringElem(b, v.String())
-}
-
-func appendBytesElemValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	return appendBytesElem(b, v.Bytes())
-}
-
-func arrayAppendDriverValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	iface, err := v.Interface().(driver.Valuer).Value()
-	if err != nil {
-		return dialect.AppendError(b, err)
-	}
-	return appendElem(b, iface)
-}
-
-func appendStringSliceValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	ss := v.Convert(sliceStringType).Interface().([]string)
-	return appendStringSlice(b, ss)
-}
-
-func appendStringSlice(b []byte, ss []string) []byte {
-	if ss == nil {
+// bindArrayValue binds the slice or array as-is; pgx encodes it as a
+// Postgres array of the parameter's element type. A nil slice is NULL.
+func bindArrayValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
+	if v.Kind() == reflect.Slice && v.IsNil() {
 		return dialect.AppendNull(b)
 	}
-
-	b = append(b, '\'')
-
-	b = append(b, '{')
-	for _, s := range ss {
-		b = appendStringElem(b, s)
-		b = append(b, ',')
-	}
-	if len(ss) > 0 {
-		b[len(b)-1] = '}' // Replace trailing comma.
-	} else {
-		b = append(b, '}')
-	}
-
-	b = append(b, '\'')
-
-	return b
-}
-
-func appendIntSliceValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	ints := v.Convert(sliceIntType).Interface().([]int)
-	return appendIntSlice(b, ints)
-}
-
-func appendIntSlice(b []byte, ints []int) []byte {
-	if ints == nil {
-		return dialect.AppendNull(b)
-	}
-
-	b = append(b, '\'')
-
-	b = append(b, '{')
-	for _, n := range ints {
-		b = strconv.AppendInt(b, int64(n), 10)
-		b = append(b, ',')
-	}
-	if len(ints) > 0 {
-		b[len(b)-1] = '}' // Replace trailing comma.
-	} else {
-		b = append(b, '}')
-	}
-
-	b = append(b, '\'')
-
-	return b
-}
-
-func appendInt64SliceValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	ints := v.Convert(sliceInt64Type).Interface().([]int64)
-	return appendInt64Slice(b, ints)
-}
-
-func appendInt64Slice(b []byte, ints []int64) []byte {
-	if ints == nil {
-		return dialect.AppendNull(b)
-	}
-
-	b = append(b, '\'')
-
-	b = append(b, '{')
-	for _, n := range ints {
-		b = strconv.AppendInt(b, n, 10)
-		b = append(b, ',')
-	}
-	if len(ints) > 0 {
-		b[len(b)-1] = '}' // Replace trailing comma.
-	} else {
-		b = append(b, '}')
-	}
-
-	b = append(b, '\'')
-
-	return b
-}
-
-func appendFloat64SliceValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	floats := v.Convert(sliceFloat64Type).Interface().([]float64)
-	return appendFloat64Slice(b, floats)
-}
-
-func appendFloat64Slice(b []byte, floats []float64) []byte {
-	if floats == nil {
-		return dialect.AppendNull(b)
-	}
-
-	b = append(b, '\'')
-
-	b = append(b, '{')
-	for _, n := range floats {
-		b = arrayAppendFloat64(b, n)
-		b = append(b, ',')
-	}
-	if len(floats) > 0 {
-		b[len(b)-1] = '}' // Replace trailing comma.
-	} else {
-		b = append(b, '}')
-	}
-
-	b = append(b, '\'')
-
-	return b
-}
-
-func arrayAppendFloat64(b []byte, num float64) []byte {
-	switch {
-	case math.IsNaN(num):
-		return append(b, "NaN"...)
-	case math.IsInf(num, 1):
-		return append(b, "Infinity"...)
-	case math.IsInf(num, -1):
-		return append(b, "-Infinity"...)
-	default:
-		return strconv.AppendFloat(b, num, 'f', -1, 64)
-	}
-}
-
-func appendTimeSliceValue(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-	ts := v.Convert(sliceTimeType).Interface().([]time.Time)
-	return appendTimeSlice(gen, b, ts)
-}
-
-func appendTimeSlice(gen schema.QueryGen, b []byte, ts []time.Time) []byte {
-	if ts == nil {
-		return dialect.AppendNull(b)
-	}
-	b = append(b, '\'')
-	b = append(b, '{')
-	for _, t := range ts {
-		b = append(b, '"')
-		b = appendTime(b, t)
-		b = append(b, '"')
-		b = append(b, ',')
-	}
-	if len(ts) > 0 {
-		b[len(b)-1] = '}' // Replace trailing comma.
-	} else {
-		b = append(b, '}')
-	}
-	b = append(b, '\'')
-	return b
+	return gen.Bind(b, v.Interface())
 }
 
 //------------------------------------------------------------------------------

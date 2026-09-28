@@ -1,18 +1,16 @@
 package schema
 
 import (
-	"database/sql/driver"
+	"bytes"
 	"fmt"
 	"net"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/piprim/pgcrud/dialect"
 	"github.com/piprim/pgcrud/dialect/sqltype"
 	"github.com/piprim/pgcrud/extra/bunjson"
-	"github.com/piprim/pgcrud/internal"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -182,78 +180,93 @@ func PtrAppender(fn AppenderFunc) AppenderFunc {
 	}
 }
 
+// uintAsIntDialect is implemented by dialects that store unsigned integers in
+// signed columns by reinterpreting the bits, see pgdialect.WithAppendUintAsInt.
+type uintAsIntDialect interface {
+	UintAsInt() bool
+}
+
+// bindUint binds n, wrapped to the signed type of the same width when the
+// dialect asks for it.
+func bindUint(gen QueryGen, b []byte, n uint64, bits int) []byte {
+	if d, ok := gen.Dialect().(uintAsIntDialect); ok && d.UintAsInt() {
+		if bits == 32 {
+			return gen.Bind(b, int32(uint32(n)))
+		}
+		return gen.Bind(b, int64(n))
+	}
+	if bits == 32 {
+		return gen.Bind(b, uint32(n))
+	}
+	return gen.Bind(b, n)
+}
+
 func AppendBoolValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return gen.Dialect().AppendBool(b, v.Bool())
+	return gen.Bind(b, v.Bool())
 }
 
 func AppendIntValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return strconv.AppendInt(guardLineComment(b, v.Int() < 0), v.Int(), 10)
+	return gen.Bind(b, v.Int())
 }
 
 func AppendUintValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return strconv.AppendUint(b, v.Uint(), 10)
+	return gen.Bind(b, v.Uint())
 }
 
 func appendUint32Value(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return gen.Dialect().AppendUint32(b, uint32(v.Uint()))
+	return bindUint(gen, b, v.Uint(), 32)
 }
 
 func appendUint64Value(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return gen.Dialect().AppendUint64(b, v.Uint())
+	return bindUint(gen, b, v.Uint(), 64)
 }
 
 func AppendFloat32Value(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return dialect.AppendFloat32(guardLineComment(b, v.Float() < 0), float32(v.Float()))
+	return gen.Bind(b, float32(v.Float()))
 }
 
 func AppendFloat64Value(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return dialect.AppendFloat64(guardLineComment(b, v.Float() < 0), float64(v.Float()))
+	return gen.Bind(b, v.Float())
 }
 
 func appendBytesValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return gen.Dialect().AppendBytes(b, v.Bytes())
+	return gen.Bind(b, v.Bytes())
 }
 
 func appendArrayBytesValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	if v.CanAddr() {
-		return gen.Dialect().AppendBytes(b, v.Slice(0, v.Len()).Bytes())
-	}
-
 	tmp := make([]byte, v.Len())
 	reflect.Copy(reflect.ValueOf(tmp), v)
-	b = gen.Dialect().AppendBytes(b, tmp)
-	return b
+	return gen.Bind(b, tmp)
 }
 
 func AppendStringValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return gen.Dialect().AppendString(b, v.String())
+	return gen.Bind(b, v.String())
 }
 
 func AppendJSONValue(gen QueryGen, b []byte, v reflect.Value) []byte {
 	bb, err := bunjson.Marshal(v.Interface())
 	if err != nil {
-		return dialect.AppendError(b, err)
+		return gen.BindError(b, err)
 	}
 
 	if len(bb) > 0 && bb[len(bb)-1] == '\n' {
 		bb = bb[:len(bb)-1]
 	}
 
-	return gen.Dialect().AppendJSON(b, bb)
+	return gen.Bind(b, bb)
 }
 
 func appendTimeValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	tm := v.Interface().(time.Time)
-	return gen.Dialect().AppendTime(b, tm)
+	return gen.Bind(b, v.Interface().(time.Time))
 }
 
 func appendIPNetValue(gen QueryGen, b []byte, v reflect.Value) []byte {
 	ipnet := v.Interface().(net.IPNet)
-	return gen.Dialect().AppendString(b, ipnet.String())
+	return gen.Bind(b, ipnet.String())
 }
 
 func appendStringer(gen QueryGen, b []byte, v reflect.Value) []byte {
-	return gen.Dialect().AppendString(b, v.Interface().(fmt.Stringer).String())
+	return gen.Bind(b, v.Interface().(fmt.Stringer).String())
 }
 
 func appendJSONRawMessageValue(gen QueryGen, b []byte, v reflect.Value) []byte {
@@ -261,56 +274,46 @@ func appendJSONRawMessageValue(gen QueryGen, b []byte, v reflect.Value) []byte {
 	if bytes == nil {
 		return dialect.AppendNull(b)
 	}
-	return gen.Dialect().AppendString(b, internal.String(bytes))
+	return gen.Bind(b, []byte(bytes))
 }
 
 func appendQueryAppenderValue(gen QueryGen, b []byte, v reflect.Value) []byte {
 	return AppendQueryAppender(gen, b, v.Interface().(QueryAppender))
 }
 
+// appendDriverValue binds the valuer itself; pgx calls Value() when encoding.
 func appendDriverValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	value, err := v.Interface().(driver.Valuer).Value()
-	if err != nil {
-		return dialect.AppendError(b, err)
-	}
-	if _, ok := value.(driver.Valuer); ok {
-		return dialect.AppendError(b, fmt.Errorf("driver.Valuer returns unsupported type %T", value))
-	}
-	return gen.Append(b, value)
+	return gen.Bind(b, v.Interface())
 }
 
 func addrAppender(fn AppenderFunc) AppenderFunc {
 	return func(gen QueryGen, b []byte, v reflect.Value) []byte {
 		if !v.CanAddr() {
 			err := fmt.Errorf("pgcrud: Append(nonaddressable %T)", v.Interface())
-			return dialect.AppendError(b, err)
+			return gen.BindError(b, err)
 		}
 		return fn(gen, b, v.Addr())
 	}
 }
 
 func appendMsgpack(gen QueryGen, b []byte, v reflect.Value) []byte {
-	hexEnc := internal.NewHexEncoder(b)
+	var buf bytes.Buffer
 
 	enc := msgpack.GetEncoder()
 	defer msgpack.PutEncoder(enc)
 
-	enc.Reset(hexEnc)
+	enc.Reset(&buf)
 	if err := enc.EncodeValue(v); err != nil {
-		return dialect.AppendError(b, err)
+		return gen.BindError(b, err)
 	}
 
-	if err := hexEnc.Close(); err != nil {
-		return dialect.AppendError(b, err)
-	}
-
-	return hexEnc.Bytes()
+	return gen.Bind(b, buf.Bytes())
 }
 
 func AppendQueryAppender(gen QueryGen, b []byte, app QueryAppender) []byte {
 	bb, err := app.AppendQuery(gen, b)
 	if err != nil {
-		return dialect.AppendError(b, err)
+		return gen.BindError(b, err)
 	}
 	return bb
 }

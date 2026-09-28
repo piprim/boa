@@ -31,7 +31,7 @@ func TestNew(t *testing.T) {
 	t.Run("builds SQL without a pool", func(t *testing.T) {
 		db := pgcrud.New(nil)
 		q := db.NewSelect().Model((*User)(nil)).Where("id = ?", 1)
-		require.Equal(t, `SELECT "user"."id", "user"."name" FROM "users" AS "user" WHERE (id = 1)`, q.String())
+		require.Equal(t, `SELECT "user"."id", "user"."name" FROM "users" AS "user" WHERE (id = $1)`, q.String())
 	})
 
 	t.Run("executing without a pool returns ErrNilExecutor", func(t *testing.T) {
@@ -63,10 +63,11 @@ func TestExecutorResolver(t *testing.T) {
 		require.Equal(t, "marker", seen.Value(ctxKey{}))
 	})
 
-	t.Run("query is sent with the simple protocol as its only argument", func(t *testing.T) {
+	t.Run("query is sent with the result-format map and no values", func(t *testing.T) {
 		require.Len(t, exec.calls, 1)
 		require.Equal(t, "Query", exec.calls[0].method)
-		require.Equal(t, []any{pgx.QueryExecModeSimpleProtocol}, exec.calls[0].args)
+		require.Len(t, exec.calls[0].args, 1)
+		require.IsType(t, pgx.QueryResultFormatsByOID{}, exec.calls[0].args[0])
 		require.Equal(t, `SELECT "user"."id", "user"."name" FROM "users" AS "user"`, exec.calls[0].sql)
 	})
 
@@ -157,7 +158,7 @@ func TestExec(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(3), res.RowsAffected())
 		require.Equal(t, "Exec", exec.calls[0].method)
-		require.Equal(t, []any{pgx.QueryExecModeSimpleProtocol}, exec.calls[0].args)
+		require.Empty(t, exec.calls[0].args)
 	})
 
 	t.Run("executor error is returned unchanged", func(t *testing.T) {
@@ -184,12 +185,13 @@ func TestExec(t *testing.T) {
 		require.True(t, ok)
 	})
 
-	t.Run("DB.Exec formats placeholders", func(t *testing.T) {
+	t.Run("DB.Exec binds placeholders", func(t *testing.T) {
 		exec := &fakeExecutor{tag: pgconn.NewCommandTag("UPDATE 1")}
 		res, err := withExec(exec).Exec(ctx, "UPDATE users SET name = ? WHERE id = ?", "x", 5)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), res.RowsAffected())
-		require.Equal(t, "UPDATE users SET name = 'x' WHERE id = 5", exec.calls[0].sql)
+		require.Equal(t, "UPDATE users SET name = $1 WHERE id = $2", exec.calls[0].sql)
+		require.Equal(t, []any{"x", 5}, exec.calls[0].args)
 	})
 }
 

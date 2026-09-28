@@ -3,7 +3,6 @@ package pgcrud_test
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"testing"
 	"time"
 
@@ -1610,22 +1609,33 @@ func TestQuery(t *testing.T) {
 		},
 	}
 
-	timeRE := regexp.MustCompile(`'2\d{3}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2})?'`)
-
 	t.Run("pg", func(t *testing.T) {
 		db := pgcrud.New(nil)
 		for _, tt := range tests {
 			t.Run(fmt.Sprintf("%d", tt.id), func(t *testing.T) {
-				q := tt.query(db)
-
-				query, err := q.AppendQuery(db.QueryGen(), nil)
-				if err != nil {
-					assertSnapshot(t, err.Error())
-				} else {
-					query = timeRE.ReplaceAll(query, []byte("[TIME]"))
-					assertSnapshot(t, string(query))
-				}
+				assertSnapshot(t, renderSnapshot(db, tt.query(db)))
 			})
 		}
 	})
+}
+
+// renderSnapshot renders q as the SQL pgx would receive followed by a line
+// listing the bound values. time.Time values are replaced by "[TIME]" because
+// soft deletes bind time.Now().
+func renderSnapshot(db *pgcrud.DB, q schema.QueryAppender) string {
+	list := schema.NewArgList()
+	sql, err := q.AppendQuery(db.QueryGen().WithArgList(list), nil)
+	if err != nil {
+		return err.Error()
+	}
+	if err := list.Err(); err != nil {
+		return err.Error()
+	}
+	args := list.Args()
+	for i, a := range args {
+		if _, ok := a.(time.Time); ok {
+			args[i] = "[TIME]"
+		}
+	}
+	return string(sql) + "\n-- args: " + fmt.Sprintf("%#v", args)
 }

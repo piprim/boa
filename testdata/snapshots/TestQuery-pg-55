@@ -1,1 +1,2 @@
-REPLACE INTO "models" ("id", "str") VALUES (DEFAULT, '') RETURNING "id"
+REPLACE INTO "models" ("id", "str") VALUES (DEFAULT, $1) RETURNING "id"
+-- args: []interface {}{""}

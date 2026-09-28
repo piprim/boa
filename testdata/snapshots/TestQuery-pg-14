@@ -1,1 +1,2 @@
 SELECT DISTINCT ON (foo) "model"."id", "model"."str" FROM "models" AS "model"
+-- args: []interface {}{}

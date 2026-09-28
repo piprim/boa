@@ -2,69 +2,68 @@ package pgdialect
 
 import (
 	"database/sql/driver"
-	"encoding/hex"
 	"fmt"
+	"math"
+	"reflect"
 	"strconv"
 	"time"
 	"unicode/utf8"
-
-	"github.com/piprim/pgcrud/dialect"
 )
 
-func appendElem(buf []byte, val any) []byte {
+// appendElem writes one range bound in the text form the Postgres range
+// parser reads. Strings are double-quoted with backslash escapes.
+func appendElem(buf []byte, val any) ([]byte, error) {
 	switch val := val.(type) {
-	case int64:
-		return strconv.AppendInt(buf, val, 10)
-	case float64:
-		return arrayAppendFloat64(buf, val)
-	case bool:
-		return dialect.AppendBool(buf, val)
-	case []byte:
-		return appendBytesElem(buf, val)
-	case string:
-		return appendStringElem(buf, val)
 	case time.Time:
 		buf = append(buf, '"')
 		buf = appendTime(buf, val)
-		buf = append(buf, '"')
-		return buf
+		return append(buf, '"'), nil
+	case []byte:
+		return appendStringElem(buf, string(val)), nil
 	case driver.Valuer:
-		val2, err := val.Value()
+		v, err := val.Value()
 		if err != nil {
-			err := fmt.Errorf("pgdialect: can't append elem value: %w", err)
-			return dialect.AppendError(buf, err)
+			return nil, fmt.Errorf("pgdialect: can't append elem value: %w", err)
 		}
-		return appendElem(buf, val2)
+		return appendElem(buf, v)
+	}
+
+	rv := reflect.ValueOf(val)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.AppendInt(buf, rv.Int(), 10), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.AppendUint(buf, rv.Uint(), 10), nil
+	case reflect.Float32, reflect.Float64:
+		return appendFloat64Elem(buf, rv.Float()), nil
+	case reflect.String:
+		return appendStringElem(buf, rv.String()), nil
+	}
+	return nil, fmt.Errorf("pgdialect: can't append elem %T", val)
+}
+
+func appendFloat64Elem(b []byte, num float64) []byte {
+	switch {
+	case math.IsNaN(num):
+		return append(b, "NaN"...)
+	case math.IsInf(num, 1):
+		return append(b, "Infinity"...)
+	case math.IsInf(num, -1):
+		return append(b, "-Infinity"...)
 	default:
-		err := fmt.Errorf("pgdialect: can't append elem %T", val)
-		return dialect.AppendError(buf, err)
+		return strconv.AppendFloat(b, num, 'f', -1, 64)
 	}
 }
 
-func appendBytesElem(b []byte, bs []byte) []byte {
-	if bs == nil {
-		return dialect.AppendNull(b)
-	}
-
-	b = append(b, `"\\x`...)
-
-	s := len(b)
-	b = append(b, make([]byte, hex.EncodedLen(len(bs)))...)
-	hex.Encode(b[s:], bs)
-
-	b = append(b, '"')
-
-	return b
-}
-
+// appendStringElem writes s double-quoted for the array, range and hstore
+// text parsers: a double quote and a backslash are escaped by a backslash.
+// It performs no SQL-literal escaping, because the text is bound, not inlined.
 func appendStringElem(b []byte, s string) []byte {
 	b = append(b, '"')
 	for _, r := range s {
 		switch r {
 		case 0:
-			// ignore
-		case '\'':
-			b = append(b, "''"...)
+			// Postgres rejects NUL in text; dropping it keeps the parser happy.
 		case '"':
 			b = append(b, '\\', '"')
 		case '\\':
@@ -82,6 +81,5 @@ func appendStringElem(b []byte, s string) []byte {
 			b = b[:l+n]
 		}
 	}
-	b = append(b, '"')
-	return b
+	return append(b, '"')
 }

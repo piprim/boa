@@ -1,1 +1,2 @@
-SELECT * WHERE (id IN ('\x68656c6c6f', '\x776f726c64'))
+SELECT * WHERE (id IN ($1, $2))
+-- args: []interface {}{[]uint8{0x68, 0x65, 0x6c, 0x6c, 0x6f}, []uint8{0x77, 0x6f, 0x72, 0x6c, 0x64}}

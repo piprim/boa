@@ -1,1 +1,2 @@
-INSERT INTO "models" ("array") VALUES ('{"foo","bar"}')
+INSERT INTO "models" ("array") VALUES ($1)
+-- args: []interface {}{[]pgcrud_test.mystr{"foo", "bar"}}

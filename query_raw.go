@@ -2,6 +2,8 @@ package pgcrud
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -68,13 +70,16 @@ func (q *RawQuery) scanOrExec(
 	// if a comment is propagated via the context, use it
 	setCommentFromContext(ctx, q)
 
-	query := q.db.format(q.query, q.args)
+	query, args, err := q.build(q)
+	if err != nil {
+		return pgconn.CommandTag{}, q.db.failBuild(ctx, q, q.model, err)
+	}
 	var res pgconn.CommandTag
 
 	if hasDest {
-		res, err = q.scan(ctx, q, query, model, hasDest)
+		res, err = q.scan(ctx, q, query, args, model, hasDest)
 	} else {
-		res, err = q.exec(ctx, q, query)
+		res, err = q.exec(ctx, q, query, args)
 	}
 
 	if err != nil {
@@ -84,8 +89,21 @@ func (q *RawQuery) scanOrExec(
 	return res, nil
 }
 
+// AppendQuery renders the raw SQL. Question marks are translated to $n and
+// their args bound. A query with no question mark at all is pgx-style SQL
+// that already carries $n placeholders: it is written unchanged and its args
+// are passed through in order. Mixing both styles is not supported.
 func (q *RawQuery) AppendQuery(gen schema.QueryGen, b []byte) ([]byte, error) {
 	b = appendComment(b, q.comment)
+
+	if len(q.args) > 0 && strings.IndexByte(q.query, '?') == -1 {
+		if len(gen.Args()) > 0 {
+			// The $n in the raw text would refer to values bound before it.
+			return nil, errors.New("pgcrud: raw SQL with $n placeholders cannot follow bound values; use ? placeholders")
+		}
+		gen.BindArgs(q.args...)
+		return append(b, q.query...), nil
+	}
 
 	return gen.AppendQuery(b, q.query, q.args...), nil
 }
@@ -94,12 +112,28 @@ func (q *RawQuery) Operation() string {
 	return "SELECT"
 }
 
-// String returns the generated SQL query string. The RawQuery instance must not be
-// modified during query generation to ensure multiple calls to String() return identical results.
+// Build renders the query and returns the SQL with $n placeholders together
+// with the values bound to them. The query must not be modified while
+// rendering, so repeated calls return identical results.
+func (q *RawQuery) Build() (string, []any, error) {
+	return q.db.build(q)
+}
+
+// String returns the SQL with $n placeholders. It panics on a render error.
 func (q *RawQuery) String() string {
-	buf, err := q.AppendQuery(q.db.QueryGen(), nil)
+	sql, _, err := q.Build()
 	if err != nil {
 		panic(err)
 	}
-	return string(buf)
+	return sql
+}
+
+// Args returns the values bound to the placeholders of String. It panics on
+// a render error.
+func (q *RawQuery) Args() []any {
+	_, args, err := q.Build()
+	if err != nil {
+		panic(err)
+	}
+	return args
 }

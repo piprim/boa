@@ -1,1 +1,2 @@
-INSERT INTO "models" ("id", "str") VALUES (42, 'custom'), (43, 'custom') RETURNING "str"
+INSERT INTO "models" ("id", "str") VALUES ($1, $2), ($3, $4) RETURNING "str"
+-- args: []interface {}{42, "custom", 43, "custom"}

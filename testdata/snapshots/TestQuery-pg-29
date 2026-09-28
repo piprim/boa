@@ -1,1 +1,2 @@
-UPDATE "models" SET "str" = 'hello' WHERE (id = 42)
+UPDATE "models" SET "str" = $1 WHERE (id = 42)
+-- args: []interface {}{"hello"}

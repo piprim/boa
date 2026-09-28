@@ -120,6 +120,10 @@ func (m *mapSliceModel) appendValues(gen schema.QueryGen, b []byte) (_ []byte, e
 				b = append(b, ", "...)
 			}
 			b = gen.Append(b, el[key])
+			if cast := valuesCast(el[key]); cast != "" && m.db.HasFeature(feature.DoubleColonCast) {
+				b = append(b, "::"...)
+				b = append(b, cast...)
+			}
 		}
 	}
 

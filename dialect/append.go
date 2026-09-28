@@ -1,49 +1,11 @@
 package dialect
 
 import (
-	"math"
-	"strconv"
-
 	"github.com/piprim/pgcrud/internal"
 )
 
-func AppendError(b []byte, err error) []byte {
-	b = append(b, "?!("...)
-	b = append(b, err.Error()...)
-	b = append(b, ')')
-	return b
-}
-
 func AppendNull(b []byte) []byte {
 	return append(b, "NULL"...)
-}
-
-func AppendBool(b []byte, v bool) []byte {
-	if v {
-		return append(b, "TRUE"...)
-	}
-	return append(b, "FALSE"...)
-}
-
-func AppendFloat32(b []byte, num float32) []byte {
-	return appendFloat(b, float64(num), 32)
-}
-
-func AppendFloat64(b []byte, num float64) []byte {
-	return appendFloat(b, num, 64)
-}
-
-func appendFloat(b []byte, num float64, bitSize int) []byte {
-	switch {
-	case math.IsNaN(num):
-		return append(b, "'NaN'"...)
-	case math.IsInf(num, 1):
-		return append(b, "'Infinity'"...)
-	case math.IsInf(num, -1):
-		return append(b, "'-Infinity'"...)
-	default:
-		return strconv.AppendFloat(b, num, 'f', -1, bitSize)
-	}
 }
 
 //------------------------------------------------------------------------------

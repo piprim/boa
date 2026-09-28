@@ -1,1 +1,2 @@
-SELECT * WHERE (1 + 2.34 AS "sum")
+SELECT * WHERE ($1 + $2 AS "sum")
+-- args: []interface {}{1, 2.34}

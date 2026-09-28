@@ -1,1 +1,2 @@
-VALUES (42::BIGINT, 'hello'::VARCHAR), (43::BIGINT, 'world'::VARCHAR)
+VALUES ($1::BIGINT, $2::VARCHAR), ($3::BIGINT, $4::VARCHAR)
+-- args: []interface {}{42, "hello", 43, "world"}

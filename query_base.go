@@ -551,11 +551,12 @@ func (q *baseQuery) scan(
 	ctx context.Context,
 	iquery Query,
 	query string,
+	args []any,
 	model Model,
 	hasDest bool,
 ) (pgconn.CommandTag, error) {
-	ctx, event := q.db.beforeQuery(ctx, iquery, query, nil, query, q.model)
-	res, err := q._scan(ctx, iquery, query, model, hasDest)
+	ctx, event := q.db.beforeQuery(ctx, iquery, query, args, q.model)
+	res, err := q._scan(ctx, iquery, query, args, model, hasDest)
 	q.db.afterQuery(ctx, event, res, err)
 	return res, err
 }
@@ -564,6 +565,7 @@ func (q *baseQuery) _scan(
 	ctx context.Context,
 	iquery Query,
 	query string,
+	args []any,
 	model Model,
 	hasDest bool,
 ) (pgconn.CommandTag, error) {
@@ -572,7 +574,7 @@ func (q *baseQuery) _scan(
 		return pgconn.CommandTag{}, err
 	}
 
-	rows, err := exec.Query(ctx, query, pgx.QueryExecModeSimpleProtocol)
+	rows, err := exec.Query(ctx, query, q.db.queryArgs(args)...)
 	if err != nil {
 		return pgconn.CommandTag{}, err
 	}
@@ -593,13 +595,14 @@ func (q *baseQuery) exec(
 	ctx context.Context,
 	iquery Query,
 	query string,
+	args []any,
 ) (pgconn.CommandTag, error) {
-	ctx, event := q.db.beforeQuery(ctx, iquery, query, nil, query, q.model)
+	ctx, event := q.db.beforeQuery(ctx, iquery, query, args, q.model)
 
 	var res pgconn.CommandTag
 	exec, err := q.resolveExecutor(ctx, iquery, query)
 	if err == nil {
-		res, err = exec.Exec(ctx, query, pgx.QueryExecModeSimpleProtocol)
+		res, err = exec.Exec(ctx, query, q.db.execArgs(args)...)
 	}
 
 	q.db.afterQuery(ctx, event, res, err)
@@ -827,7 +830,7 @@ func (q *whereBaseQuery) appendWhere(
 			} else {
 				b = append(b, " = "...)
 			}
-			b = gen.Dialect().AppendTime(b, time.Time{})
+			b = gen.Bind(b, time.Time{})
 		}
 	}
 

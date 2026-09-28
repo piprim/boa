@@ -1,1 +1,2 @@
-INSERT INTO "soft_deletes" AS "soft_delete" ("id", "deleted_at") VALUES (DEFAULT, '0001-01-01 00:00:00+00:00') ON CONFLICT DO NOTHING RETURNING "id"
+INSERT INTO "soft_deletes" AS "soft_delete" ("id", "deleted_at") VALUES (DEFAULT, $1) ON CONFLICT DO NOTHING RETURNING "id"
+-- args: []interface {}{"[TIME]"}

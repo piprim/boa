@@ -1,1 +1,2 @@
 INSERT INTO "dest" (id, name) SELECT id, name FROM "src"
+-- args: []interface {}{}

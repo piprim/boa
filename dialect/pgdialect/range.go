@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/piprim/pgcrud/internal"
@@ -128,35 +130,42 @@ func (r *Range[T]) Scan(raw any) (err error) {
 
 var _ schema.QueryAppender = (*Range[any])(nil)
 
-func (r Range[T]) AppendQuery(_ schema.QueryGen, buf []byte) ([]byte, error) {
-	buf = append(buf, '\'')
-	buf = appendRange(buf, r)
-	buf = append(buf, '\'')
-	return buf, nil
+// AppendQuery binds the range in its text form. Postgres infers the range type
+// from the column or operator; where nothing does, cast in the SQL: ?::daterange.
+func (r Range[T]) AppendQuery(gen schema.QueryGen, buf []byte) ([]byte, error) {
+	text, err := appendRange(nil, r)
+	if err != nil {
+		return nil, err
+	}
+	return gen.Bind(buf, string(text)), nil
 }
 
-func appendRange[T any](buf []byte, r Range[T]) []byte {
+func appendRange[T any](buf []byte, r Range[T]) (_ []byte, err error) {
 	if r.IsEmpty() {
-		buf = append(buf, []byte("empty")...)
-		return buf
+		return append(buf, "empty"...), nil
 	}
 
 	if r.LowerBound == RangeBoundUnset {
-		// NOTE from pg's document:
-		// > Specifying a missing bound as inclusive is automatically converted to exclusive, e.g., [,] is converted to (,).
+		// A missing bound is always exclusive: [,] is read as (,).
 		buf = append(buf, byte(RangeBoundExclusiveLeft))
 	} else {
 		buf = append(buf, byte(r.LowerBound))
-		buf = appendElem(buf, r.Lower)
+		buf, err = appendElem(buf, r.Lower)
+		if err != nil {
+			return nil, err
+		}
 	}
 	buf = append(buf, ',')
 	if r.UpperBound == RangeBoundUnset {
 		buf = append(buf, byte(RangeBoundExclusiveRight))
 	} else {
-		buf = appendElem(buf, r.Upper)
+		buf, err = appendElem(buf, r.Upper)
+		if err != nil {
+			return nil, err
+		}
 		buf = append(buf, byte(r.UpperBound))
 	}
-	return buf
+	return buf, nil
 }
 
 func (m *MultiRange[T]) Len() int {
@@ -170,29 +179,29 @@ func (m *MultiRange[T]) IsZero() bool {
 	return m.Len() == 0
 }
 
-func (m MultiRange[T]) AppendQuery(_ schema.QueryGen, buf []byte) ([]byte, error) {
-	if m == nil {
-		return append(buf, []byte("'{}'")...), nil
+// AppendQuery binds the multirange in its text form, {} for nil.
+func (m MultiRange[T]) AppendQuery(gen schema.QueryGen, buf []byte) ([]byte, error) {
+	text := []byte{'{'}
+	for i, r := range m {
+		if i > 0 {
+			text = append(text, ',')
+		}
+		var err error
+		text, err = appendRange(text, r)
+		if err != nil {
+			return nil, err
+		}
 	}
-	rs := ([]Range[T])(m)
-	buf = append(buf, '\'', '{')
-	for _, r := range rs {
-		buf = appendRange(buf, r)
-		buf = append(buf, ',')
-	}
-	if len(rs) > 0 {
-		buf[len(buf)-1] = '}'
-	} else {
-		buf = append(buf, '}')
-	}
-	buf = append(buf, '\'')
-	return buf, nil
+	text = append(text, '}')
+	return gen.Bind(buf, string(text)), nil
 }
 
+// scanElem parses one range bound from its text form into ptr. Quoted bounds
+// are unquoted and their backslash escapes removed.
 func scanElem(ptr any, src []byte) ([]byte, error) {
 	// NOTE: for daterange, pg return 2024-12-01, for tzrange, pg return "2024-12-01 12:00:00"
 	if len(src) >= 2 && src[0] == '"' {
-		src = src[1 : len(src)-1]
+		src = unquoteElem(src[1 : len(src)-1])
 	}
 
 	switch ptr := ptr.(type) {
@@ -210,8 +219,51 @@ func scanElem(ptr any, src []byte) ([]byte, error) {
 			return nil, err
 		}
 		return src, nil
-
-	default:
-		panic(fmt.Errorf("unsupported range type: %T", ptr))
 	}
+
+	rv := reflect.ValueOf(ptr)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return nil, fmt.Errorf("pgdialect: unsupported range type %T", ptr)
+	}
+	ev := rv.Elem()
+	switch ev.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(internal.String(src), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		ev.SetInt(n)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, err := strconv.ParseUint(internal.String(src), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		ev.SetUint(n)
+	case reflect.Float32, reflect.Float64:
+		f, err := strconv.ParseFloat(internal.String(src), 64)
+		if err != nil {
+			return nil, err
+		}
+		ev.SetFloat(f)
+	case reflect.String:
+		ev.SetString(string(src))
+	default:
+		return nil, fmt.Errorf("pgdialect: unsupported range type %T", ptr)
+	}
+	return src, nil
+}
+
+// unquoteElem removes the backslash escapes of a double-quoted range bound.
+func unquoteElem(src []byte) []byte {
+	if bytes.IndexByte(src, '\\') < 0 {
+		return src
+	}
+	out := make([]byte, 0, len(src))
+	for i := 0; i < len(src); i++ {
+		if src[i] == '\\' && i+1 < len(src) {
+			i++
+		}
+		out = append(out, src[i])
+	}
+	return out
 }

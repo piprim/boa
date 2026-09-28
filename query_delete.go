@@ -210,7 +210,7 @@ func (q *DeleteQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 			whereBaseQuery: q.whereBaseQuery,
 			returningQuery: q.returningQuery,
 		}
-		upd.Set(q.softDeleteSet(gen, now))
+		upd.Set(q.softDeleteSet(gen), now)
 
 		return upd.AppendQuery(gen, b)
 	}
@@ -283,15 +283,16 @@ func (q *DeleteQuery) isSoftDelete() bool {
 	return q.tableModel != nil && q.table.SoftDeleteField != nil && !q.flags.Has(forceDeleteFlag)
 }
 
-func (q *DeleteQuery) softDeleteSet(gen schema.QueryGen, tm time.Time) string {
+// softDeleteSet returns the SET expression that marks a row deleted, with a
+// placeholder for the timestamp, which the caller passes as the Set argument.
+func (q *DeleteQuery) softDeleteSet(gen schema.QueryGen) string {
 	b := make([]byte, 0, 32)
 	if gen.HasFeature(feature.UpdateMultiTable) {
 		b = append(b, q.table.SQLAlias...)
 		b = append(b, '.')
 	}
 	b = append(b, q.table.SoftDeleteField.SQLName...)
-	b = append(b, " = "...)
-	b = gen.Append(b, tm)
+	b = append(b, " = ?"...)
 	return internal.String(b)
 }
 
@@ -328,9 +329,9 @@ func (q *DeleteQuery) scanOrExec(
 	setCommentFromContext(ctx, q)
 
 	// Generate the query before checking hasReturning.
-	queryBytes, err := q.AppendQuery(q.db.gen, q.db.makeQueryBytes())
+	query, args, err := q.build(q)
 	if err != nil {
-		return pgconn.CommandTag{}, err
+		return pgconn.CommandTag{}, q.db.failBuild(ctx, q, q.model, err)
 	}
 
 	useScan := hasDest || (q.hasReturning() && q.hasFeature(feature.DeleteReturning|feature.Output))
@@ -344,17 +345,15 @@ func (q *DeleteQuery) scanOrExec(
 		}
 	}
 
-	query := internal.String(queryBytes)
-
 	var res pgconn.CommandTag
 
 	if useScan {
-		res, err = q.scan(ctx, q, query, model, hasDest)
+		res, err = q.scan(ctx, q, query, args, model, hasDest)
 		if err != nil {
 			return pgconn.CommandTag{}, err
 		}
 	} else {
-		res, err = q.exec(ctx, q, query)
+		res, err = q.exec(ctx, q, query, args)
 		if err != nil {
 			return pgconn.CommandTag{}, err
 		}
@@ -387,14 +386,30 @@ func (q *DeleteQuery) afterDeleteHook(ctx context.Context) error {
 	return nil
 }
 
-// String returns the generated SQL query string. The DeleteQuery instance must not be
-// modified during query generation to ensure multiple calls to String() return identical results.
+// Build renders the query and returns the SQL with $n placeholders together
+// with the values bound to them. The query must not be modified while
+// rendering, so repeated calls return identical results.
+func (q *DeleteQuery) Build() (string, []any, error) {
+	return q.db.build(q)
+}
+
+// String returns the SQL with $n placeholders. It panics on a render error.
 func (q *DeleteQuery) String() string {
-	buf, err := q.AppendQuery(q.db.QueryGen(), nil)
+	sql, _, err := q.Build()
 	if err != nil {
 		panic(err)
 	}
-	return string(buf)
+	return sql
+}
+
+// Args returns the values bound to the placeholders of String. It panics on
+// a render error.
+func (q *DeleteQuery) Args() []any {
+	_, args, err := q.Build()
+	if err != nil {
+		panic(err)
+	}
+	return args
 }
 
 //------------------------------------------------------------------------------

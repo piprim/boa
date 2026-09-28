@@ -72,6 +72,26 @@ func WithQueryHook(hook QueryHook) DBOption {
 	}
 }
 
+// WithQueryExecMode overrides pgx's default execution mode for every query.
+// Without it pgx's connection default applies, QueryExecModeCacheStatement.
+func WithQueryExecMode(mode pgx.QueryExecMode) DBOption {
+	return func(db *DB) {
+		db.execMode = mode
+		db.hasExecMode = true
+	}
+}
+
+// WithTextResultTypes asks Postgres to return the given column types in text
+// format. Use it for types the application registered on the pool with a
+// codec that prefers binary but that pgcrud scans with its text parsers.
+func WithTextResultTypes(oids ...uint32) DBOption {
+	return func(db *DB) {
+		for _, oid := range oids {
+			db.resultFormats[oid] = pgx.TextFormatCode
+		}
+	}
+}
+
 // DB is the central access point for building and executing queries.
 type DB struct {
 	// Must be a pointer so we copy the whole state, not individual fields.
@@ -87,6 +107,10 @@ type noCopyState struct {
 	resolver ExecutorResolver
 	dialect  schema.Dialect
 
+	execMode      pgx.QueryExecMode
+	hasExecMode   bool
+	resultFormats pgx.QueryResultFormatsByOID
+
 	flags internal.Flag
 }
 
@@ -97,9 +121,10 @@ func New(pool *pgxpool.Pool, opts ...DBOption) *DB {
 
 	db := &DB{
 		noCopyState: &noCopyState{
-			pool:     pool,
-			resolver: poolResolver(pool),
-			dialect:  dialect,
+			pool:          pool,
+			resolver:      poolResolver(pool),
+			dialect:       dialect,
+			resultFormats: textResultFormats(),
 		},
 		gen: schema.NewQueryGen(dialect),
 	}
@@ -406,46 +431,56 @@ func (db *DB) HasFeature(feat feature.Feature) bool {
 
 //------------------------------------------------------------------------------
 
-// Exec formats query with pgcrud placeholders and executes it without returning rows.
-// It is always treated as a write for WithTxRequiredForWrites.
+// Exec translates ? placeholders to $n, binds args and executes query without
+// returning rows. It is always treated as a write for WithTxRequiredForWrites.
 func (db *DB) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
-	formattedQuery := db.format(query, args)
-	ctx, event := db.beforeQuery(ctx, nil, query, args, formattedQuery, nil)
+	sql, bound, err := db.build(NewRawQuery(db, query, args...))
+	if err != nil {
+		return pgconn.CommandTag{}, db.failBuild(ctx, nil, nil, err)
+	}
+	ctx, event := db.beforeQuery(ctx, nil, sql, bound, nil)
 
 	var res pgconn.CommandTag
 	exec, err := db.writeExecutor(ctx)
 	if err == nil {
-		res, err = exec.Exec(ctx, formattedQuery, pgx.QueryExecModeSimpleProtocol)
+		res, err = exec.Exec(ctx, sql, db.execArgs(bound)...)
 	}
 
 	db.afterQuery(ctx, event, res, err)
 	return res, err
 }
 
-// Query formats query with pgcrud placeholders and executes it, returning pgx rows.
-// The caller must close the rows.
+// Query translates ? placeholders to $n, binds args and executes query,
+// returning pgx rows. The caller must close the rows.
 //
 // On error pgx may return a non-nil, already-closed pgx.Rows alongside the
 // error (bun returned nil rows), so check the error before using the rows.
 func (db *DB) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
-	formattedQuery := db.format(query, args)
-	ctx, event := db.beforeQuery(ctx, nil, query, args, formattedQuery, nil)
+	sql, bound, err := db.build(NewRawQuery(db, query, args...))
+	if err != nil {
+		return nil, db.failBuild(ctx, nil, nil, err)
+	}
+	ctx, event := db.beforeQuery(ctx, nil, sql, bound, nil)
 
 	var rows pgx.Rows
 	exec, err := db.Executor(ctx)
 	if err == nil {
-		rows, err = exec.Query(ctx, formattedQuery, pgx.QueryExecModeSimpleProtocol)
+		rows, err = exec.Query(ctx, sql, db.queryArgs(bound)...)
 	}
 
 	db.afterQuery(ctx, event, pgconn.CommandTag{}, err)
 	return rows, err
 }
 
-// QueryRow formats query with pgcrud placeholders and executes it, returning a pgx row.
-// Errors surface from the row's Scan; the query hook sees a nil error.
+// QueryRow translates ? placeholders to $n, binds args and executes query,
+// returning a pgx row. Errors surface from the row's Scan; the query hook
+// sees a nil error.
 func (db *DB) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
-	formattedQuery := db.format(query, args)
-	ctx, event := db.beforeQuery(ctx, nil, query, args, formattedQuery, nil)
+	sql, bound, err := db.build(NewRawQuery(db, query, args...))
+	if err != nil {
+		return errRow{err: db.failBuild(ctx, nil, nil, err)}
+	}
+	ctx, event := db.beforeQuery(ctx, nil, sql, bound, nil)
 
 	exec, err := db.Executor(ctx)
 	if err != nil {
@@ -453,7 +488,7 @@ func (db *DB) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
 		return errRow{err: err}
 	}
 
-	row := exec.QueryRow(ctx, formattedQuery, pgx.QueryExecModeSimpleProtocol)
+	row := exec.QueryRow(ctx, sql, db.queryArgs(bound)...)
 	db.afterQuery(ctx, event, pgconn.CommandTag{}, nil)
 	return row
 }
@@ -462,10 +497,6 @@ func (db *DB) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
 type errRow struct{ err error }
 
 func (r errRow) Scan(...any) error { return r.err }
-
-func (db *DB) format(query string, args []any) string {
-	return db.gen.FormatQuery(query, args...)
-}
 
 func (db *DB) makeQueryBytes() []byte {
 	return internal.MakeQueryBytes()

@@ -1,1 +1,2 @@
-UPDATE "models" AS "model" SET "name" = 'name1', updated_at = [TIME] WHERE (id = 1)
+UPDATE "models" AS "model" SET "name" = $1, updated_at = $2 WHERE (id = $3)
+-- args: []interface {}{"name1", "[TIME]", 1}

@@ -1,1 +1,2 @@
 DELETE FROM "soft_deletes" AS "soft_delete" WHERE ("soft_delete"."id" = NULL)
+-- args: []interface {}{}

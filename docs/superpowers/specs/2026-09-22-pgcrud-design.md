@@ -124,7 +124,7 @@ There is no per-query connection override, so `baseQuery.conn` is removed. `Scan
 
 Every public `Exec` on the query builders returns `(pgconn.CommandTag, error)`. `QueryEvent.Result` becomes `pgconn.CommandTag`. Query hooks are otherwise unchanged.
 
-Values are inlined into the SQL text by bun's formatter, exactly as today. The simple-protocol mode is passed as the sole argument on every call, so no pool configuration is needed and Postgres returns every column in text format.
+Values are inlined into the SQL text by bun's formatter, exactly as today. The simple-protocol mode is passed as the sole argument on every call, so no pool configuration is needed and Postgres returns every column in text format. Superseded: values are bound as `$n` parameters since `2026-09-27-bound-parameters-design.md`.
 
 ### 4.4 Transactions
 
@@ -170,10 +170,9 @@ All tests use `t.Run` per assertion or table row.
 
 ## 8. Out of scope and future enhancements
 
-- **Real placeholders.** Emit `$1..$n` and pass Go values to pgx for encoding, enabling prepared-statement caching and binary transfer. Requires reworking bun's placeholder handling (named args, identifiers, subqueries) and binary decoding in the scanners. Constraint for that work: in binary format pgx passes a `sql.Scanner` the raw `[]byte` from its read buffer, which is only valid until the next `Scan`. Today, with the simple protocol, every value reaches a scanner as a freshly allocated slice or an immutable string, so nothing aliases the buffer. Moving to binary means every scanner that retains bytes must copy, as `database/sql` already required. Recorded as the first candidate enhancement after the port.
+- **Real placeholders.** Implemented by `2026-09-27-bound-parameters-design.md`. The constraint recorded here about pgx handing a `sql.Scanner` the raw read buffer in binary format was checked against pgx 5.9.2 and does not apply: every registered codec's `DecodeDatabaseSQLValue` returns a typed value or a fresh copy. The binary hazard is arrays, ranges and multiranges, whose binary wire form the text parsers cannot read; they are requested in text.
 - Removing feature-flag branches that only mattered for other databases.
 - `SendBatch` is part of `DBExecutor` for interface parity with the application's unit of work but is not used by the library in this version.
-- Migrations, fixtures, DDL builders, Merge queries, connection resolvers for replicas, and the observability packages under bun's `extra/`.
 
 ## 9. Implementation notes
 
