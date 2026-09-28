@@ -34,26 +34,6 @@ func Underscore(s string) string {
 	return string(r)
 }
 
-func CamelCased(s string) string {
-	r := make([]byte, 0, len(s))
-	upperNext := true
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '_' {
-			upperNext = true
-			continue
-		}
-		if upperNext {
-			if IsLower(c) {
-				c = ToUpper(c)
-			}
-			upperNext = false
-		}
-		r = append(r, c)
-	}
-	return string(r)
-}
-
 func ToExported(s string) string {
 	if len(s) == 0 {
 		return s

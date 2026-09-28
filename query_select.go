@@ -10,8 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/dialect"
-
 	"github.com/piprim/pgcrud/schema"
 )
 
@@ -23,7 +21,6 @@ type union struct {
 // SelectQuery builds SQL SELECT statements.
 type SelectQuery struct {
 	whereBaseQuery
-	idxHintsQuery
 	orderLimitOffsetQuery
 
 	distinctOn []schema.QueryWithArgs
@@ -193,102 +190,6 @@ func (q *SelectQuery) WhereAllWithDeleted() *SelectQuery {
 }
 
 //------------------------------------------------------------------------------
-
-// UseIndex adds a USE INDEX hint for MySQL to suggest index usage.
-func (q *SelectQuery) UseIndex(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addUseIndex(indexes...)
-	}
-	return q
-}
-
-// UseIndexForJoin adds a USE INDEX FOR JOIN hint for MySQL.
-func (q *SelectQuery) UseIndexForJoin(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addUseIndexForJoin(indexes...)
-	}
-	return q
-}
-
-// UseIndexForOrderBy adds a USE INDEX FOR ORDER BY hint for MySQL.
-func (q *SelectQuery) UseIndexForOrderBy(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addUseIndexForOrderBy(indexes...)
-	}
-	return q
-}
-
-// UseIndexForGroupBy adds a USE INDEX FOR GROUP BY hint for MySQL.
-func (q *SelectQuery) UseIndexForGroupBy(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addUseIndexForGroupBy(indexes...)
-	}
-	return q
-}
-
-// IgnoreIndex adds an IGNORE INDEX hint for MySQL to prevent index usage.
-func (q *SelectQuery) IgnoreIndex(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addIgnoreIndex(indexes...)
-	}
-	return q
-}
-
-// IgnoreIndexForJoin adds an IGNORE INDEX FOR JOIN hint for MySQL.
-func (q *SelectQuery) IgnoreIndexForJoin(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addIgnoreIndexForJoin(indexes...)
-	}
-	return q
-}
-
-// IgnoreIndexForOrderBy adds an IGNORE INDEX FOR ORDER BY hint for MySQL.
-func (q *SelectQuery) IgnoreIndexForOrderBy(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addIgnoreIndexForOrderBy(indexes...)
-	}
-	return q
-}
-
-// IgnoreIndexForGroupBy adds an IGNORE INDEX FOR GROUP BY hint for MySQL.
-func (q *SelectQuery) IgnoreIndexForGroupBy(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addIgnoreIndexForGroupBy(indexes...)
-	}
-	return q
-}
-
-// ForceIndex adds a FORCE INDEX hint for MySQL to require index usage.
-func (q *SelectQuery) ForceIndex(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addForceIndex(indexes...)
-	}
-	return q
-}
-
-// ForceIndexForJoin adds a FORCE INDEX FOR JOIN hint for MySQL.
-func (q *SelectQuery) ForceIndexForJoin(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addForceIndexForJoin(indexes...)
-	}
-	return q
-}
-
-// ForceIndexForOrderBy adds a FORCE INDEX FOR ORDER BY hint for MySQL.
-func (q *SelectQuery) ForceIndexForOrderBy(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addForceIndexForOrderBy(indexes...)
-	}
-	return q
-}
-
-// ForceIndexForGroupBy adds a FORCE INDEX FOR GROUP BY hint for MySQL.
-func (q *SelectQuery) ForceIndexForGroupBy(indexes ...string) *SelectQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addForceIndexForGroupBy(indexes...)
-	}
-	return q
-}
 
 //------------------------------------------------------------------------------
 
@@ -585,8 +486,7 @@ func (q *SelectQuery) appendQuery(
 		b = append(b, "WITH _count_wrapper AS ("...)
 	}
 
-	// SQLite requires UNION parts to be emitted without extra parentheses.
-	wrapUnion := len(q.union) > 0 && gen.Dialect().Name() != dialect.SQLite
+	wrapUnion := len(q.union) > 0
 
 	if wrapUnion {
 		b = append(b, '(')
@@ -625,11 +525,6 @@ func (q *SelectQuery) appendQuery(
 	if count && !cteCount {
 		b = append(b, "count(*)"...)
 	} else {
-		// MSSQL: allows Limit() without Order() as per https://stackoverflow.com/a/36156953
-		if q.limit > 0 && len(q.order) == 0 && gen.Dialect().Name() == dialect.MSSQL {
-			b = append(b, "0 AS _temp_sort, "...)
-		}
-
 		b, err = q.appendColumns(gen, b)
 		if err != nil {
 			return nil, err
@@ -641,11 +536,6 @@ func (q *SelectQuery) appendQuery(
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	b, err = q.appendIndexHints(gen, b)
-	if err != nil {
-		return nil, err
 	}
 
 	if err := q.forEachInlineRelJoin(func(j *relationJoin) error {
@@ -1195,17 +1085,6 @@ func (q *SelectQuery) Clone() *SelectQuery {
 		copy(clone, fields)
 		return clone
 	}
-	cloneHints := func(hints *indexHints) *indexHints {
-		if hints == nil {
-			return nil
-		}
-		return &indexHints{
-			names:      cloneArgs(hints.names),
-			forJoin:    cloneArgs(hints.forJoin),
-			forOrderBy: cloneArgs(hints.forOrderBy),
-			forGroupBy: cloneArgs(hints.forGroupBy),
-		}
-	}
 
 	var tableModel TableModel
 	if q.tableModel != nil {
@@ -1228,12 +1107,6 @@ func (q *SelectQuery) Clone() *SelectQuery {
 			where:       make([]schema.QueryWithSep, len(q.where)),
 			whereFields: cloneWhereFields(q.whereFields),
 			whereHasOr:  q.whereHasOr,
-		},
-
-		idxHintsQuery: idxHintsQuery{
-			use:    cloneHints(q.idxHintsQuery.use),
-			ignore: cloneHints(q.idxHintsQuery.ignore),
-			force:  cloneHints(q.idxHintsQuery.force),
 		},
 
 		orderLimitOffsetQuery: orderLimitOffsetQuery{

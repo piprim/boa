@@ -3,19 +3,17 @@ package schema
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v3"
-	"github.com/vmihailenco/msgpack/v5"
-
 	"github.com/piprim/pgcrud/dialect/sqltype"
-	"github.com/piprim/pgcrud/extra/bunjson"
 	"github.com/piprim/pgcrud/internal"
 )
 
@@ -54,12 +52,9 @@ func init() {
 	}
 }
 
-var scannerCache = xsync.NewMapOf[reflect.Type, ScannerFunc]()
+var scannerCache sync.Map // reflect.Type -> ScannerFunc
 
-func FieldScanner(dialect Dialect, field *Field) ScannerFunc {
-	if field.Tag.HasOption("msgpack") {
-		return scanMsgpack
-	}
+func FieldScanner(field *Field) ScannerFunc {
 	if field.Tag.HasOption("json_use_number") {
 		return scanJSONUseNumber
 	}
@@ -74,13 +69,13 @@ func FieldScanner(dialect Dialect, field *Field) ScannerFunc {
 
 func Scanner(typ reflect.Type) ScannerFunc {
 	if v, ok := scannerCache.Load(typ); ok {
-		return v
+		return v.(ScannerFunc)
 	}
 
 	fn := scanner(typ)
 
 	if v, ok := scannerCache.LoadOrStore(typ, fn); ok {
-		return v
+		return v.(ScannerFunc)
 	}
 	return fn
 }
@@ -331,23 +326,6 @@ func scanScanner(dest reflect.Value, src any) error {
 	return dest.Interface().(sql.Scanner).Scan(src)
 }
 
-func scanMsgpack(dest reflect.Value, src any) error {
-	if src == nil {
-		return scanNull(dest)
-	}
-
-	b, err := toBytes(src)
-	if err != nil {
-		return err
-	}
-
-	dec := msgpack.GetDecoder()
-	defer msgpack.PutDecoder(dec)
-
-	dec.Reset(bytes.NewReader(b))
-	return dec.DecodeValue(dest)
-}
-
 func scanJSON(dest reflect.Value, src any) error {
 	if src == nil {
 		return scanNull(dest)
@@ -361,7 +339,7 @@ func scanJSON(dest reflect.Value, src any) error {
 		return err
 	}
 
-	return bunjson.Unmarshal(b, dest.Addr().Interface())
+	return json.Unmarshal(b, dest.Addr().Interface())
 }
 
 func scanJSONUseNumber(dest reflect.Value, src any) error {
@@ -377,7 +355,7 @@ func scanJSONUseNumber(dest reflect.Value, src any) error {
 		return err
 	}
 
-	dec := bunjson.NewDecoder(bytes.NewReader(b))
+	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()
 	return dec.Decode(dest.Addr().Interface())
 }
@@ -536,7 +514,7 @@ func scanJSONIntoInterface(dest reflect.Value, src any) error {
 			return err
 		}
 
-		return bunjson.Unmarshal(b, dest.Addr().Interface())
+		return json.Unmarshal(b, dest.Addr().Interface())
 	}
 
 	dest = dest.Elem()

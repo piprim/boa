@@ -33,7 +33,7 @@ func Array(vi any) *ArrayValue {
 	return &ArrayValue{
 		v: v,
 
-		append: pgDialect.arrayAppender(v.Type()),
+		append: arrayAppender(v.Type()),
 		scan:   arrayScanner(v.Type()),
 	}
 }
@@ -69,10 +69,10 @@ func (a *ArrayValue) Value() any {
 
 //------------------------------------------------------------------------------
 
-func (d *Dialect) arrayAppender(typ reflect.Type) schema.AppenderFunc {
+func arrayAppender(typ reflect.Type) schema.AppenderFunc {
 	switch typ.Kind() {
 	case reflect.Pointer:
-		if fn := d.arrayAppender(typ.Elem()); fn != nil {
+		if fn := arrayAppender(typ.Elem()); fn != nil {
 			return schema.PtrAppender(fn)
 		}
 		return nil

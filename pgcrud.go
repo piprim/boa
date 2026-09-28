@@ -100,13 +100,6 @@ func SetLogger(logger internal.Logging) {
 	internal.SetLogger(logger)
 }
 
-// In wraps a slice so it can be used with the IN clause.
-//
-// Deprecated: Use bun.List or bun.Tuple instead.
-func In(slice any) schema.QueryAppender {
-	return schema.In(slice)
-}
-
 // NullZero forces zero values to be treated as NULL when building queries.
 func NullZero(value any) schema.QueryAppender {
 	return schema.NullZero(value)

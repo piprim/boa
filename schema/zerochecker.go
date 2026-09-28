@@ -12,42 +12,14 @@ type isZeroer interface {
 }
 
 func isZero(v any) bool {
-	switch v := v.(type) {
-	case isZeroer:
-		return v.IsZero()
-	case string:
-		return v == ""
-	case []byte:
-		return v == nil
-	case int:
-		return v == 0
-	case int64:
-		return v == 0
-	case uint:
-		return v == 0
-	case uint64:
-		return v == 0
-	case float32:
-		return v == 0
-	case float64:
-		return v == 0
-	case int8:
-		return v == 0
-	case int16:
-		return v == 0
-	case int32:
-		return v == 0
-	case uint8:
-		return v == 0
-	case uint16:
-		return v == 0
-	case uint32:
-		return v == 0
-	default:
-		rv := reflect.ValueOf(v)
-		fn := zeroChecker(rv.Type())
-		return fn(rv)
+	if v == nil {
+		return true
 	}
+	if z, ok := v.(isZeroer); ok {
+		return z.IsZero()
+	}
+	rv := reflect.ValueOf(v)
+	return zeroChecker(rv.Type())(rv)
 }
 
 // IsZeroerFunc reports whether a reflect.Value is a zero value.
@@ -60,31 +32,22 @@ func zeroChecker(typ reflect.Type) IsZeroerFunc {
 
 	kind := typ.Kind()
 
-	if kind != reflect.Pointer {
-		ptr := reflect.PointerTo(typ)
-		if ptr.Implements(isZeroerType) {
-			return addrChecker(isZeroInterface)
-		}
+	if kind != reflect.Pointer && reflect.PointerTo(typ).Implements(isZeroerType) {
+		return addrChecker(isZeroInterface)
 	}
 
 	switch kind {
 	case reflect.Array:
 		if typ.Elem().Kind() == reflect.Uint8 {
-			return isZeroBytes
+			return reflect.Value.IsZero
 		}
 		return isZeroLen
-	case reflect.String:
-		return isZeroLen
-	case reflect.Bool:
-		return isZeroBool
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return isZeroInt
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return isZeroUint
-	case reflect.Float32, reflect.Float64:
-		return isZeroFloat
-	case reflect.Interface, reflect.Pointer, reflect.Slice, reflect.Map:
-		return isNil
+	case reflect.String, reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Interface, reflect.Pointer, reflect.Slice, reflect.Map:
+		return reflect.Value.IsZero
 	}
 
 	if typ.Implements(driverValuerType) {
@@ -125,36 +88,6 @@ func isZeroDriverValue(v reflect.Value) bool {
 
 func isZeroLen(v reflect.Value) bool {
 	return v.Len() == 0
-}
-
-func isNil(v reflect.Value) bool {
-	return v.IsNil()
-}
-
-func isZeroBool(v reflect.Value) bool {
-	return !v.Bool()
-}
-
-func isZeroInt(v reflect.Value) bool {
-	return v.Int() == 0
-}
-
-func isZeroUint(v reflect.Value) bool {
-	return v.Uint() == 0
-}
-
-func isZeroFloat(v reflect.Value) bool {
-	return v.Float() == 0
-}
-
-func isZeroBytes(v reflect.Value) bool {
-	b := v.Slice(0, v.Len()).Bytes()
-	for _, c := range b {
-		if c != 0 {
-			return false
-		}
-	}
-	return true
 }
 
 func notZero(v reflect.Value) bool {

@@ -214,10 +214,6 @@ func (t *fakeTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 	return t.fakeExecutor.QueryRow(ctx, sql, args...)
 }
 
-func (t *fakeTx) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
-	return t.fakeExecutor.SendBatch(ctx, b)
-}
-
 func TestTxRequiredForWrites(t *testing.T) {
 	ctx := context.Background()
 	strict := func(exec pgcrud.DBExecutor) *pgcrud.DB {

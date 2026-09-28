@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/dialect/sqltype"
 	"github.com/piprim/pgcrud/schema"
 )
@@ -135,11 +134,7 @@ func (q *ValuesQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 	gen = formatterWithModel(gen, q)
 
 	b = append(b, "VALUES "...)
-	if q.db.HasFeature(feature.ValuesRow) {
-		b = append(b, "ROW("...)
-	} else {
-		b = append(b, '(')
-	}
+	b = append(b, '(')
 
 	switch model := q.model.(type) {
 	case *structTableModel:
@@ -168,11 +163,7 @@ func (q *ValuesQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		for i := range sliceLen {
 			if i > 0 {
 				b = append(b, "), "...)
-				if q.db.HasFeature(feature.ValuesRow) {
-					b = append(b, "ROW("...)
-				} else {
-					b = append(b, '(')
-				}
+				b = append(b, '(')
 			}
 
 			b, err = q.appendValues(gen, b, fields, model.slice.Index(i))
@@ -224,7 +215,7 @@ func (q *ValuesQuery) appendValues(
 
 		// The cast is what types the column of a VALUES list, since a bound
 		// value carries no type of its own.
-		if gen.HasFeature(feature.DoubleColonCast) && f.UserSQLType != "" {
+		if f.UserSQLType != "" {
 			b = append(b, "::"...)
 			b = append(b, f.UserSQLType...)
 		}

@@ -16,7 +16,7 @@ func ptr[T any](v T) *T {
 
 func bindGen() (schema.QueryGen, *schema.ArgList) {
 	list := schema.NewArgList()
-	return schema.NewQueryGen(New()).WithArgList(list), list
+	return schema.NewQueryGen(New().Tables(), false).WithArgList(list), list
 }
 
 func TestArrayAppend(t *testing.T) {

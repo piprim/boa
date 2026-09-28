@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/schema"
 )
 
@@ -21,8 +20,6 @@ type InsertQuery struct {
 	on schema.QueryWithArgs
 	setQuery
 
-	ignore  bool
-	replace bool
 	comment string
 }
 
@@ -158,23 +155,9 @@ func (q *InsertQuery) Returning(query string, args ...any) *InsertQuery {
 
 //------------------------------------------------------------------------------
 
-// Ignore generates different queries depending on the DBMS:
-//   - On MySQL, it generates `INSERT IGNORE INTO`.
-//   - On PostgreSQL, it generates `ON CONFLICT DO NOTHING`.
+// Ignore skips conflicting rows: INSERT ... ON CONFLICT DO NOTHING.
 func (q *InsertQuery) Ignore() *InsertQuery {
-	if q.db.gen.HasFeature(feature.InsertOnConflict) {
-		return q.On("CONFLICT DO NOTHING")
-	}
-	if q.db.gen.HasFeature(feature.InsertIgnore) {
-		q.ignore = true
-	}
-	return q
-}
-
-// Replaces generates a `REPLACE INTO` query (MySQL and MariaDB).
-func (q *InsertQuery) Replace() *InsertQuery {
-	q.replace = true
-	return q
+	return q.On("CONFLICT DO NOTHING")
 }
 
 //------------------------------------------------------------------------------
@@ -206,17 +189,9 @@ func (q *InsertQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		return nil, err
 	}
 
-	if q.replace {
-		b = append(b, "REPLACE "...)
-	} else {
-		b = append(b, "INSERT "...)
-		if q.ignore {
-			b = append(b, "IGNORE "...)
-		}
-	}
-	b = append(b, "INTO "...)
+	b = append(b, "INSERT INTO "...)
 
-	if q.db.HasFeature(feature.InsertTableAlias) && !q.on.IsZero() {
+	if !q.on.IsZero() {
 		b, err = q.appendFirstTableWithAlias(gen, b)
 	} else {
 		b, err = q.appendFirstTable(gen, b)
@@ -225,7 +200,7 @@ func (q *InsertQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		return nil, err
 	}
 
-	b, err = q.appendColumnsValues(gen, b, false)
+	b, err = q.appendColumnsValues(gen, b)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +210,7 @@ func (q *InsertQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		return nil, err
 	}
 
-	if q.hasFeature(feature.InsertReturning) && q.hasReturning() {
+	if q.hasReturning() {
 		b = append(b, " RETURNING "...)
 		b, err = q.appendReturning(gen, b)
 		if err != nil {
@@ -247,7 +222,7 @@ func (q *InsertQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 }
 
 func (q *InsertQuery) appendColumnsValues(
-	gen schema.QueryGen, b []byte, skipOutput bool,
+	gen schema.QueryGen, b []byte,
 ) (_ []byte, err error) {
 	if q.hasMultiTables() {
 		if q.columns != nil {
@@ -257,14 +232,6 @@ func (q *InsertQuery) appendColumnsValues(
 				return nil, err
 			}
 			b = append(b, ")"...)
-		}
-
-		if q.hasFeature(feature.Output) && q.hasReturning() {
-			b = append(b, " OUTPUT "...)
-			b, err = q.appendOutput(gen, b)
-			if err != nil {
-				return nil, err
-			}
 		}
 
 		b = append(b, " SELECT "...)
@@ -307,14 +274,6 @@ func (q *InsertQuery) appendColumnsValues(
 	b = append(b, " ("...)
 	b = q.appendFields(gen, b, fields)
 	b = append(b, ")"...)
-
-	if q.hasFeature(feature.Output) && q.hasReturning() && !skipOutput {
-		b = append(b, " OUTPUT "...)
-		b, err = q.appendOutput(gen, b)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	b = append(b, " VALUES ("...)
 
@@ -361,13 +320,7 @@ func (q *InsertQuery) appendStructValues(
 		case isTemplate:
 			b = append(b, '?')
 		case q.marshalsToDefault(f, strct):
-			if q.db.HasFeature(feature.DefaultPlaceholder) {
-				b = append(b, "DEFAULT"...)
-			} else if f.SQLDefault != "" {
-				b = append(b, f.SQLDefault...)
-			} else {
-				b = append(b, "NULL"...)
-			}
+			b = append(b, "DEFAULT"...)
 			q.addReturningField(f)
 		default:
 			b = f.AppendValue(gen, b, strct)
@@ -410,45 +363,7 @@ func (q *InsertQuery) appendSliceValues(
 	return b, nil
 }
 
-func (q *InsertQuery) getFields() ([]*schema.Field, error) {
-	hasIdentity := q.db.HasFeature(feature.Identity)
-
-	if len(q.columns) > 0 || q.db.HasFeature(feature.DefaultPlaceholder) && !hasIdentity {
-		return q.baseQuery.getFields()
-	}
-
-	var strct reflect.Value
-
-	switch model := q.tableModel.(type) {
-	case *structTableModel:
-		strct = model.strct
-	case *sliceTableModel:
-		if model.sliceLen == 0 {
-			return nil, fmt.Errorf("pgcrud: Insert(empty %T)", model.slice.Type())
-		}
-		strct = indirect(model.slice.Index(0))
-	default:
-		return nil, errNilModel
-	}
-
-	fields := make([]*schema.Field, 0, len(q.table.Fields))
-
-	for _, f := range q.table.Fields {
-		if hasIdentity && f.AutoIncrement {
-			q.addReturningField(f)
-			continue
-		}
-		if f.NotNull && q.marshalsToDefault(f, strct) {
-			q.addReturningField(f)
-			continue
-		}
-		fields = append(fields, f)
-	}
-
-	return fields, nil
-}
-
-// marshalsToDefault checks if the value will be marshaled as DEFAULT or NULL (if DEFAULT placeholder is not supported)
+// marshalsToDefault checks if the value will be marshaled as DEFAULT
 // when appending it to the VALUES clause in place of the given field.
 func (q InsertQuery) marshalsToDefault(f *schema.Field, v reflect.Value) bool {
 	return (f.IsPtr && f.HasNilValue(v)) ||
@@ -470,7 +385,7 @@ func (q *InsertQuery) appendFields(
 
 //------------------------------------------------------------------------------
 
-// On adds an ON clause for upsert behavior (e.g., "CONFLICT (id) DO UPDATE", "DUPLICATE KEY UPDATE").
+// On adds an ON clause for upsert behavior (e.g., "CONFLICT (id) DO UPDATE").
 func (q *InsertQuery) On(s string, args ...any) *InsertQuery {
 	q.on = schema.SafeQuery(s, args)
 	return q
@@ -500,11 +415,7 @@ func (q *InsertQuery) appendOn(gen schema.QueryGen, b []byte) (_ []byte, err err
 	}
 
 	if len(q.set) > 0 || q.setValues != nil {
-		if gen.HasFeature(feature.InsertOnDuplicateKey) {
-			b = append(b, ' ')
-		} else {
-			b = append(b, " SET "...)
-		}
+		b = append(b, " SET "...)
 
 		b, err = q.appendSet(gen, b)
 		if err != nil {
@@ -516,12 +427,6 @@ func (q *InsertQuery) appendOn(gen schema.QueryGen, b []byte) (_ []byte, err err
 			return nil, err
 		}
 		b = q.appendSetExcluded(b, fields)
-	} else if q.onDuplicateKeyUpdate() {
-		fields, err := q.getDataFields()
-		if err != nil {
-			return nil, err
-		}
-		b = q.appendSetValues(b, fields)
 	}
 
 	if len(q.where) > 0 {
@@ -540,10 +445,6 @@ func (q *InsertQuery) onConflictDoUpdate() bool {
 	return strings.HasSuffix(strings.ToUpper(q.on.Query), " DO UPDATE")
 }
 
-func (q *InsertQuery) onDuplicateKeyUpdate() bool {
-	return strings.ToUpper(q.on.Query) == "DUPLICATE KEY UPDATE"
-}
-
 func (q *InsertQuery) appendSetExcluded(b []byte, fields []*schema.Field) []byte {
 	b = append(b, " SET "...)
 	for i, f := range fields {
@@ -557,29 +458,15 @@ func (q *InsertQuery) appendSetExcluded(b []byte, fields []*schema.Field) []byte
 	return b
 }
 
-func (q *InsertQuery) appendSetValues(b []byte, fields []*schema.Field) []byte {
-	b = append(b, " "...)
-	for i, f := range fields {
-		if i > 0 {
-			b = append(b, ", "...)
-		}
-		b = append(b, f.SQLName...)
-		b = append(b, " = VALUES("...)
-		b = append(b, f.SQLName...)
-		b = append(b, ")"...)
-	}
-	return b
-}
-
 //------------------------------------------------------------------------------
 
-// Scan executes the INSERT and scans RETURNING/OUTPUT results into dest.
+// Scan executes the INSERT and scans RETURNING results into dest.
 func (q *InsertQuery) Scan(ctx context.Context, dest ...any) error {
 	_, err := q.scanOrExec(ctx, dest, true)
 	return err
 }
 
-// Exec executes the INSERT and optionally scans RETURNING/OUTPUT results into dest when provided.
+// Exec executes the INSERT and optionally scans RETURNING results into dest when provided.
 func (q *InsertQuery) Exec(ctx context.Context, dest ...any) (pgconn.CommandTag, error) {
 	return q.scanOrExec(ctx, dest, len(dest) > 0)
 }
@@ -611,7 +498,7 @@ func (q *InsertQuery) scanOrExec(
 		return pgconn.CommandTag{}, q.db.failBuild(ctx, q, q.model, err)
 	}
 
-	useScan := hasDest || (q.hasReturning() && q.hasFeature(feature.InsertReturning|feature.Output))
+	useScan := hasDest || q.hasReturning()
 	var model Model
 
 	if useScan {

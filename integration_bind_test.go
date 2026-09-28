@@ -27,7 +27,6 @@ func TestIntegrationBindMapping(t *testing.T) {
 		Period:   pgdialect.NewRange(at, at.Add(time.Hour)),
 		Addr:     net.ParseIP("10.1.2.3"),
 		Blob:     []byte{0, 1, 255},
-		Packed:   map[string]int{"p": 7},
 		Label:    "it's",
 		Rank:     -5,
 		Ratio:    2.5,
@@ -65,9 +64,6 @@ func TestIntegrationBindMapping(t *testing.T) {
 	})
 	t.Run("bytea round trips from a binary result", func(t *testing.T) {
 		require.Equal(t, in.Blob, out.Blob)
-	})
-	t.Run("msgpack round trips", func(t *testing.T) {
-		require.Equal(t, in.Packed, out.Packed)
 	})
 	t.Run("scalars round trip from binary results", func(t *testing.T) {
 		require.Equal(t, in.Label, out.Label)

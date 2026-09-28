@@ -22,10 +22,9 @@ type Field struct {
 	SQLName Safe   // escaped SQL name, e.g. "id"
 	GoName  string // struct field name, e.g. Id
 
-	DiscoveredSQLType  string
-	UserSQLType        string
-	CreateTableSQLType string
-	SQLDefault         string
+	DiscoveredSQLType string
+	UserSQLType       string
+	SQLDefault        string
 
 	OnDelete string
 	OnUpdate string

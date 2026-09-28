@@ -2,12 +2,10 @@ package pgcrud
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/internal"
 	"github.com/piprim/pgcrud/schema"
 )
@@ -15,7 +13,6 @@ import (
 // DeleteQuery builds SQL DELETE statements.
 type DeleteQuery struct {
 	whereBaseQuery
-	orderLimitOffsetQuery
 	returningQuery
 
 	comment string
@@ -128,50 +125,15 @@ func (q *DeleteQuery) WhereAllWithDeleted() *DeleteQuery {
 	return q
 }
 
-func (q *DeleteQuery) Order(orders ...string) *DeleteQuery {
-	if !q.hasFeature(feature.DeleteOrderLimit) {
-		q.setErr(feature.NewNotSupportError(feature.DeleteOrderLimit))
-		return q
-	}
-	q.addOrder(orders...)
-	return q
-}
-
-func (q *DeleteQuery) OrderExpr(query string, args ...any) *DeleteQuery {
-	if !q.hasFeature(feature.DeleteOrderLimit) {
-		q.setErr(feature.NewNotSupportError(feature.DeleteOrderLimit))
-		return q
-	}
-	q.addOrderExpr(query, args...)
-	return q
-}
-
 func (q *DeleteQuery) ForceDelete() *DeleteQuery {
 	q.flags = q.flags.Set(forceDeleteFlag)
 	return q
 }
 
-// ------------------------------------------------------------------------------
-func (q *DeleteQuery) Limit(n int64) *DeleteQuery {
-	if !q.hasFeature(feature.DeleteOrderLimit) {
-		q.setErr(feature.NewNotSupportError(feature.DeleteOrderLimit))
-		return q
-	}
-	q.setLimit(n)
-	return q
-}
-
-//------------------------------------------------------------------------------
-
 // Returning adds a RETURNING clause to the query.
 //
 // To suppress the auto-generated RETURNING clause, use `Returning("NULL")`.
 func (q *DeleteQuery) Returning(query string, args ...any) *DeleteQuery {
-	if !q.hasFeature(feature.DeleteReturning) {
-		q.setErr(feature.NewNotSupportError(feature.DeleteReturning))
-		return q
-	}
-
 	q.addReturning(schema.SafeQuery(query, args))
 	return q
 }
@@ -215,8 +177,6 @@ func (q *DeleteQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		return upd.AppendQuery(gen, b)
 	}
 
-	withAlias := q.db.HasFeature(feature.DeleteTableAlias)
-
 	b, err = q.appendWith(gen, b)
 	if err != nil {
 		return nil, err
@@ -224,11 +184,7 @@ func (q *DeleteQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 
 	b = append(b, "DELETE FROM "...)
 
-	if withAlias {
-		b, err = q.appendFirstTableWithAlias(gen, b)
-	} else {
-		b, err = q.appendFirstTable(gen, b)
-	}
+	b, err = q.appendFirstTableWithAlias(gen, b)
 	if err != nil {
 		return nil, err
 	}
@@ -241,34 +197,12 @@ func (q *DeleteQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		}
 	}
 
-	if q.hasFeature(feature.Output) && q.hasReturning() {
-		b = append(b, " OUTPUT "...)
-		b, err = q.appendOutput(gen, b)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	b, err = q.mustAppendWhere(gen, b, withAlias)
+	b, err = q.mustAppendWhere(gen, b, true)
 	if err != nil {
 		return nil, err
 	}
 
-	if q.hasMultiTables() && (len(q.order) > 0 || q.limit > 0) {
-		return nil, errors.New("pgcrud: can't use ORDER or LIMIT with multiple tables")
-	}
-
-	b, err = q.appendOrder(gen, b)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err = q.appendLimitOffset(gen, b)
-	if err != nil {
-		return nil, err
-	}
-
-	if q.hasFeature(feature.DeleteReturning) && q.hasReturning() {
+	if q.hasReturning() {
 		b = append(b, " RETURNING "...)
 		b, err = q.appendReturning(gen, b)
 		if err != nil {
@@ -287,10 +221,6 @@ func (q *DeleteQuery) isSoftDelete() bool {
 // placeholder for the timestamp, which the caller passes as the Set argument.
 func (q *DeleteQuery) softDeleteSet(gen schema.QueryGen) string {
 	b := make([]byte, 0, 32)
-	if gen.HasFeature(feature.UpdateMultiTable) {
-		b = append(b, q.table.SQLAlias...)
-		b = append(b, '.')
-	}
 	b = append(b, q.table.SoftDeleteField.SQLName...)
 	b = append(b, " = ?"...)
 	return internal.String(b)
@@ -334,7 +264,7 @@ func (q *DeleteQuery) scanOrExec(
 		return pgconn.CommandTag{}, q.db.failBuild(ctx, q, q.model, err)
 	}
 
-	useScan := hasDest || (q.hasReturning() && q.hasFeature(feature.DeleteReturning|feature.Output))
+	useScan := hasDest || q.hasReturning()
 	var model Model
 
 	if useScan {

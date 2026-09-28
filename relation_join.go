@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/internal"
 	"github.com/piprim/pgcrud/schema"
 )
@@ -61,10 +60,7 @@ func (j *relationJoin) manyQuery(q *SelectQuery) *SelectQuery {
 
 	var where []byte
 
-	if q.db.HasFeature(feature.CompositeIn) {
-		return j.manyQueryCompositeIn(where, q)
-	}
-	return j.manyQueryMulti(where, q)
+	return j.manyQueryCompositeIn(where, q)
 }
 
 func (j *relationJoin) manyQueryCompositeIn(where []byte, q *SelectQuery) *SelectQuery {
@@ -87,29 +83,6 @@ func (j *relationJoin) manyQueryCompositeIn(where []byte, q *SelectQuery) *Selec
 		q = q.Where(internal.String(where), values, joinConditions(j.additionalJoinOnConditions))
 	} else {
 		q = q.Where(internal.String(where), values)
-	}
-
-	if j.Relation.PolymorphicField != nil {
-		q = q.Where("? = ?", j.Relation.PolymorphicField.SQLName, j.Relation.PolymorphicValue)
-	}
-
-	j.applyTo(q)
-	q = q.Apply(j.hasManyColumns)
-
-	return q
-}
-
-func (j *relationJoin) manyQueryMulti(_ []byte, q *SelectQuery) *SelectQuery {
-	q = q.Where("?", multiValues{
-		root:       j.JoinModel.rootValue(),
-		index:      j.JoinModel.parentIndex(),
-		baseFields: j.Relation.BasePKs,
-		joinFields: j.Relation.JoinPKs,
-		joinTable:  j.JoinModel.Table().SQLAlias,
-	})
-
-	if len(j.additionalJoinOnConditions) > 0 {
-		q = q.Where("?", joinConditions(j.additionalJoinOnConditions))
 	}
 
 	if j.Relation.PolymorphicField != nil {
@@ -381,58 +354,6 @@ func childKey(v reflect.Value, fields []*schema.Field) string {
 		fmt.Fprintf(&sb, "%#v|", f.Value(v).Interface())
 	}
 	return sb.String()
-}
-
-// multiValues is the alternative to childValues for dialects without a
-// composite IN: ((t.k1 = $1) AND (t.k2 = $2)) OR (...).
-type multiValues struct {
-	root                   reflect.Value
-	index                  []int
-	baseFields, joinFields []*schema.Field
-	joinTable              schema.Safe
-}
-
-var _ schema.QueryAppender = multiValues{}
-
-func (m multiValues) AppendQuery(gen schema.QueryGen, b []byte) ([]byte, error) {
-	if len(m.joinFields) != len(m.baseFields) {
-		panic("not reached")
-	}
-
-	seen := make(map[string]struct{})
-	first := true
-	b = append(b, '(')
-	walk(m.root, m.index, func(v reflect.Value) {
-		key := childKey(v, m.baseFields)
-		if _, ok := seen[key]; ok {
-			return
-		}
-		seen[key] = struct{}{}
-
-		if !first {
-			b = append(b, ") OR ("...)
-		}
-		first = false
-
-		for i, f := range m.baseFields {
-			if i > 0 {
-				b = append(b, " AND "...)
-			}
-			if len(m.baseFields) > 1 {
-				b = append(b, '(')
-			}
-			b = append(b, m.joinTable...)
-			b = append(b, '.')
-			b = append(b, m.joinFields[i].SQLName...)
-			b = append(b, '=')
-			b = f.AppendValue(gen, b, v)
-			if len(m.baseFields) > 1 {
-				b = append(b, ')')
-			}
-		}
-	})
-	b = append(b, ')')
-	return b, nil
 }
 
 // joinConditions renders additional join-on conditions joined with AND.

@@ -1,18 +1,16 @@
 package schema
 
 import (
-	"bytes"
+	"encoding/json"
 	"fmt"
 	"net"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/piprim/pgcrud/dialect"
 	"github.com/piprim/pgcrud/dialect/sqltype"
-	"github.com/piprim/pgcrud/extra/bunjson"
-	"github.com/puzpuzpuz/xsync/v3"
-	"github.com/vmihailenco/msgpack/v5"
 )
 
 type (
@@ -49,13 +47,9 @@ var appenders = []AppenderFunc{
 	reflect.UnsafePointer: nil,
 }
 
-var appenderCache = xsync.NewMapOf[reflect.Type, AppenderFunc]()
+var appenderCache sync.Map // reflect.Type -> AppenderFunc
 
-func FieldAppender(dialect Dialect, field *Field) AppenderFunc {
-	if field.Tag.HasOption("msgpack") {
-		return appendMsgpack
-	}
-
+func FieldAppender(field *Field) AppenderFunc {
 	fieldType := field.StructField.Type
 
 	switch strings.ToUpper(field.UserSQLType) {
@@ -73,23 +67,23 @@ func FieldAppender(dialect Dialect, field *Field) AppenderFunc {
 		return AppendJSONValue
 	}
 
-	return Appender(dialect, fieldType)
+	return Appender(fieldType)
 }
 
-func Appender(dialect Dialect, typ reflect.Type) AppenderFunc {
+func Appender(typ reflect.Type) AppenderFunc {
 	if v, ok := appenderCache.Load(typ); ok {
-		return v
+		return v.(AppenderFunc)
 	}
 
-	fn := appender(dialect, typ)
+	fn := appender(typ)
 
 	if v, ok := appenderCache.LoadOrStore(typ, fn); ok {
-		return v
+		return v.(AppenderFunc)
 	}
 	return fn
 }
 
-func appender(dialect Dialect, typ reflect.Type) AppenderFunc {
+func appender(typ reflect.Type) AppenderFunc {
 	switch typ {
 	case bytesType:
 		return appendBytesValue
@@ -137,7 +131,7 @@ func appender(dialect Dialect, typ reflect.Type) AppenderFunc {
 		if typ.Implements(jsonMarshalerType) {
 			return nilAwareAppender(AppendJSONValue)
 		}
-		if fn := Appender(dialect, typ.Elem()); fn != nil {
+		if fn := Appender(typ.Elem()); fn != nil {
 			return PtrAppender(fn)
 		}
 	case reflect.Slice:
@@ -158,7 +152,7 @@ func ifaceAppenderFunc(gen QueryGen, b []byte, v reflect.Value) []byte {
 		return dialect.AppendNull(b)
 	}
 	elem := v.Elem()
-	appender := Appender(gen.Dialect(), elem.Type())
+	appender := Appender(elem.Type())
 	return appender(gen, b, elem)
 }
 
@@ -180,16 +174,10 @@ func PtrAppender(fn AppenderFunc) AppenderFunc {
 	}
 }
 
-// uintAsIntDialect is implemented by dialects that store unsigned integers in
-// signed columns by reinterpreting the bits, see pgdialect.WithAppendUintAsInt.
-type uintAsIntDialect interface {
-	UintAsInt() bool
-}
-
 // bindUint binds n, wrapped to the signed type of the same width when the
 // dialect asks for it.
 func bindUint(gen QueryGen, b []byte, n uint64, bits int) []byte {
-	if d, ok := gen.Dialect().(uintAsIntDialect); ok && d.UintAsInt() {
+	if gen.uintAsInt {
 		if bits == 32 {
 			return gen.Bind(b, int32(uint32(n)))
 		}
@@ -244,7 +232,7 @@ func AppendStringValue(gen QueryGen, b []byte, v reflect.Value) []byte {
 }
 
 func AppendJSONValue(gen QueryGen, b []byte, v reflect.Value) []byte {
-	bb, err := bunjson.Marshal(v.Interface())
+	bb, err := json.Marshal(v.Interface())
 	if err != nil {
 		return gen.BindError(b, err)
 	}
@@ -294,20 +282,6 @@ func addrAppender(fn AppenderFunc) AppenderFunc {
 		}
 		return fn(gen, b, v.Addr())
 	}
-}
-
-func appendMsgpack(gen QueryGen, b []byte, v reflect.Value) []byte {
-	var buf bytes.Buffer
-
-	enc := msgpack.GetEncoder()
-	defer msgpack.PutEncoder(enc)
-
-	enc.Reset(&buf)
-	if err := enc.EncodeValue(v); err != nil {
-		return gen.BindError(b, err)
-	}
-
-	return gen.Bind(b, buf.Bytes())
 }
 
 func AppendQueryAppender(gen QueryGen, b []byte, app QueryAppender) []byte {

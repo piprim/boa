@@ -38,7 +38,7 @@ func HStore(vi any) *HStoreValue {
 	return &HStoreValue{
 		v: v,
 
-		append: pgDialect.hstoreAppender(v.Type()),
+		append: hstoreAppender(v.Type()),
 		scan:   hstoreScanner(v.Type()),
 	}
 }

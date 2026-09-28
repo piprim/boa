@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/internal"
 	"github.com/piprim/pgcrud/schema"
 )
@@ -158,10 +156,6 @@ func (q *baseQuery) beforeAppendModel(ctx context.Context, query Query) error {
 	return nil
 }
 
-func (q *baseQuery) hasFeature(feature feature.Feature) bool {
-	return q.db.HasFeature(feature)
-}
-
 //------------------------------------------------------------------------------
 
 func (q *baseQuery) checkSoftDelete() error {
@@ -267,12 +261,6 @@ func (q *baseQuery) appendWith(gen schema.QueryGen, b []byte) (_ []byte, err err
 func (q *baseQuery) appendCTE(
 	gen schema.QueryGen, b []byte, cte WithQuery,
 ) (_ []byte, err error) {
-	if !gen.Dialect().Features().Has(feature.WithValues) {
-		if values, ok := cte.query.(*ValuesQuery); ok {
-			return q.appendSelectFromValues(gen, b, cte, values)
-		}
-	}
-
 	b = gen.AppendIdent(b, cte.name)
 
 	if q, ok := cte.query.(schema.ColumnsAppender); ok {
@@ -285,9 +273,9 @@ func (q *baseQuery) appendCTE(
 	}
 
 	switch {
-	case cte.materialized && gen.Dialect().Name() == dialect.PG:
+	case cte.materialized:
 		b = append(b, " AS MATERIALIZED ("...)
-	case cte.notMaterialized && gen.Dialect().Name() == dialect.PG:
+	case cte.notMaterialized:
 		b = append(b, " AS NOT MATERIALIZED ("...)
 	default:
 		b = append(b, " AS ("...)
@@ -299,31 +287,6 @@ func (q *baseQuery) appendCTE(
 	}
 
 	b = append(b, ")"...)
-	return b, nil
-}
-
-func (q *baseQuery) appendSelectFromValues(
-	gen schema.QueryGen, b []byte, cte WithQuery, values *ValuesQuery,
-) (_ []byte, err error) {
-	b = gen.AppendIdent(b, cte.name)
-	b = append(b, " AS (SELECT * FROM ("...)
-
-	b, err = cte.query.AppendQuery(gen, b)
-	if err != nil {
-		return nil, err
-	}
-
-	b = append(b, ") AS t"...)
-	if q, ok := cte.query.(schema.ColumnsAppender); ok {
-		b = append(b, " ("...)
-		b, err = q.AppendColumns(gen, b)
-		if err != nil {
-			return nil, err
-		}
-		b = append(b, ")"...)
-	}
-	b = append(b, ")"...)
-
 	return b, nil
 }
 
@@ -411,11 +374,7 @@ func (q *baseQuery) _appendTables(
 		} else {
 			b = gen.AppendQuery(b, string(q.table.SQLNameForSelects))
 			if withAlias && q.table.SQLAlias != q.table.SQLNameForSelects {
-				if q.db.dialect.Name() == dialect.Oracle {
-					b = append(b, ' ')
-				} else {
-					b = append(b, " AS "...)
-				}
+				b = append(b, " AS "...)
 				b = append(b, q.table.SQLAlias...)
 			}
 		}
@@ -652,10 +611,6 @@ func (q *baseQuery) AppendNamedArg(gen schema.QueryGen, b []byte, name string) (
 }
 
 //------------------------------------------------------------------------------
-
-func (q *baseQuery) Dialect() schema.Dialect {
-	return q.db.Dialect()
-}
 
 func (q *baseQuery) NewValues(model any) *ValuesQuery {
 	return NewValuesQuery(q.db, model)
@@ -1003,18 +958,6 @@ func (q *returningQuery) addReturningField(field *schema.Field) {
 func (q *returningQuery) appendReturning(
 	gen schema.QueryGen, b []byte,
 ) (_ []byte, err error) {
-	return q._appendReturning(gen, b, "")
-}
-
-func (q *returningQuery) appendOutput(
-	gen schema.QueryGen, b []byte,
-) (_ []byte, err error) {
-	return q._appendReturning(gen, b, "INSERTED")
-}
-
-func (q *returningQuery) _appendReturning(
-	gen schema.QueryGen, b []byte, table string,
-) (_ []byte, err error) {
 	for i, f := range q.returning {
 		if i > 0 {
 			b = append(b, ", "...)
@@ -1029,7 +972,7 @@ func (q *returningQuery) _appendReturning(
 		return b, nil
 	}
 
-	b = appendColumns(b, schema.Safe(table), q.returningFields)
+	b = appendColumns(b, "", q.returningFields)
 	return b, nil
 }
 
@@ -1117,7 +1060,6 @@ func (q *setQuery) appendSet(gen schema.QueryGen, b []byte) (_ []byte, err error
 func (q *setQuery) appendSetStruct(
 	gen schema.QueryGen, b []byte, model *structTableModel, fields []*schema.Field,
 ) (_ []byte, err error) {
-	defaultPlaceholder := gen.HasFeature(feature.DefaultPlaceholder)
 	isTemplate := gen.IsNop()
 	pos := len(b)
 	for _, f := range fields {
@@ -1149,10 +1091,8 @@ func (q *setQuery) appendSetStruct(
 			if err != nil {
 				return nil, err
 			}
-		} else if defaultPlaceholder {
-			b = f.AppendValueOrDefault(gen, b, model.strct)
 		} else {
-			b = f.AppendValue(gen, b, model.strct)
+			b = f.AppendValueOrDefault(gen, b, model.strct)
 		}
 	}
 
@@ -1181,9 +1121,6 @@ type cascadeQuery struct {
 }
 
 func (q cascadeQuery) appendCascade(gen schema.QueryGen, b []byte) []byte {
-	if !gen.HasFeature(feature.TableCascade) {
-		return b
-	}
 	if q.cascade {
 		b = append(b, " CASCADE"...)
 	}
@@ -1191,238 +1128,6 @@ func (q cascadeQuery) appendCascade(gen schema.QueryGen, b []byte) []byte {
 		b = append(b, " RESTRICT"...)
 	}
 	return b
-}
-
-//------------------------------------------------------------------------------
-
-type idxHintsQuery struct {
-	use    *indexHints
-	ignore *indexHints
-	force  *indexHints
-}
-
-type indexHints struct {
-	names      []schema.QueryWithArgs
-	forJoin    []schema.QueryWithArgs
-	forOrderBy []schema.QueryWithArgs
-	forGroupBy []schema.QueryWithArgs
-}
-
-func (ih *idxHintsQuery) lazyUse() *indexHints {
-	if ih.use == nil {
-		ih.use = new(indexHints)
-	}
-	return ih.use
-}
-
-func (ih *idxHintsQuery) lazyIgnore() *indexHints {
-	if ih.ignore == nil {
-		ih.ignore = new(indexHints)
-	}
-	return ih.ignore
-}
-
-func (ih *idxHintsQuery) lazyForce() *indexHints {
-	if ih.force == nil {
-		ih.force = new(indexHints)
-	}
-	return ih.force
-}
-
-func (ih *idxHintsQuery) appendIndexes(hints []schema.QueryWithArgs, indexes ...string) []schema.QueryWithArgs {
-	for _, idx := range indexes {
-		hints = append(hints, schema.UnsafeIdent(idx))
-	}
-	return hints
-}
-
-func (ih *idxHintsQuery) addUseIndex(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyUse().names = ih.appendIndexes(ih.use.names, indexes...)
-}
-
-func (ih *idxHintsQuery) addUseIndexForJoin(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyUse().forJoin = ih.appendIndexes(ih.use.forJoin, indexes...)
-}
-
-func (ih *idxHintsQuery) addUseIndexForOrderBy(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyUse().forOrderBy = ih.appendIndexes(ih.use.forOrderBy, indexes...)
-}
-
-func (ih *idxHintsQuery) addUseIndexForGroupBy(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyUse().forGroupBy = ih.appendIndexes(ih.use.forGroupBy, indexes...)
-}
-
-func (ih *idxHintsQuery) addIgnoreIndex(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyIgnore().names = ih.appendIndexes(ih.ignore.names, indexes...)
-}
-
-func (ih *idxHintsQuery) addIgnoreIndexForJoin(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyIgnore().forJoin = ih.appendIndexes(ih.ignore.forJoin, indexes...)
-}
-
-func (ih *idxHintsQuery) addIgnoreIndexForOrderBy(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyIgnore().forOrderBy = ih.appendIndexes(ih.ignore.forOrderBy, indexes...)
-}
-
-func (ih *idxHintsQuery) addIgnoreIndexForGroupBy(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyIgnore().forGroupBy = ih.appendIndexes(ih.ignore.forGroupBy, indexes...)
-}
-
-func (ih *idxHintsQuery) addForceIndex(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyForce().names = ih.appendIndexes(ih.force.names, indexes...)
-}
-
-func (ih *idxHintsQuery) addForceIndexForJoin(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyForce().forJoin = ih.appendIndexes(ih.force.forJoin, indexes...)
-}
-
-func (ih *idxHintsQuery) addForceIndexForOrderBy(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyForce().forOrderBy = ih.appendIndexes(ih.force.forOrderBy, indexes...)
-}
-
-func (ih *idxHintsQuery) addForceIndexForGroupBy(indexes ...string) {
-	if len(indexes) == 0 {
-		return
-	}
-	ih.lazyForce().forGroupBy = ih.appendIndexes(ih.force.forGroupBy, indexes...)
-}
-
-func (ih *idxHintsQuery) appendIndexHints(
-	gen schema.QueryGen, b []byte,
-) ([]byte, error) {
-	type IdxHint struct {
-		Name   string
-		Values []schema.QueryWithArgs
-	}
-
-	var hints []IdxHint
-	if ih.use != nil {
-		hints = append(hints, []IdxHint{
-			{
-				Name:   "USE INDEX",
-				Values: ih.use.names,
-			},
-			{
-				Name:   "USE INDEX FOR JOIN",
-				Values: ih.use.forJoin,
-			},
-			{
-				Name:   "USE INDEX FOR ORDER BY",
-				Values: ih.use.forOrderBy,
-			},
-			{
-				Name:   "USE INDEX FOR GROUP BY",
-				Values: ih.use.forGroupBy,
-			},
-		}...)
-	}
-
-	if ih.ignore != nil {
-		hints = append(hints, []IdxHint{
-			{
-				Name:   "IGNORE INDEX",
-				Values: ih.ignore.names,
-			},
-			{
-				Name:   "IGNORE INDEX FOR JOIN",
-				Values: ih.ignore.forJoin,
-			},
-			{
-				Name:   "IGNORE INDEX FOR ORDER BY",
-				Values: ih.ignore.forOrderBy,
-			},
-			{
-				Name:   "IGNORE INDEX FOR GROUP BY",
-				Values: ih.ignore.forGroupBy,
-			},
-		}...)
-	}
-
-	if ih.force != nil {
-		hints = append(hints, []IdxHint{
-			{
-				Name:   "FORCE INDEX",
-				Values: ih.force.names,
-			},
-			{
-				Name:   "FORCE INDEX FOR JOIN",
-				Values: ih.force.forJoin,
-			},
-			{
-				Name:   "FORCE INDEX FOR ORDER BY",
-				Values: ih.force.forOrderBy,
-			},
-			{
-				Name:   "FORCE INDEX FOR GROUP BY",
-				Values: ih.force.forGroupBy,
-			},
-		}...)
-	}
-
-	var err error
-	for _, h := range hints {
-		b, err = ih.bufIndexHint(h.Name, h.Values, gen, b)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return b, nil
-}
-
-func (ih *idxHintsQuery) bufIndexHint(
-	name string,
-	hints []schema.QueryWithArgs,
-	gen schema.QueryGen, b []byte,
-) ([]byte, error) {
-	var err error
-	if len(hints) == 0 {
-		return b, nil
-	}
-	b = append(b, fmt.Sprintf(" %s (", name)...)
-	for i, f := range hints {
-		if i > 0 {
-			b = append(b, ", "...)
-		}
-		b, err = f.AppendQuery(gen, b)
-		if err != nil {
-			return nil, err
-		}
-	}
-	b = append(b, ")"...)
-	return b, nil
 }
 
 //------------------------------------------------------------------------------
@@ -1477,11 +1182,6 @@ func (q *orderLimitOffsetQuery) appendOrder(gen schema.QueryGen, b []byte) (_ []
 		return b, nil
 	}
 
-	// MSSQL: allows Limit() without Order() as per https://stackoverflow.com/a/36156953
-	if q.limit > 0 && gen.Dialect().Name() == dialect.MSSQL {
-		return append(b, " ORDER BY _temp_sort"...), nil
-	}
-
 	return b, nil
 }
 
@@ -1494,37 +1194,14 @@ func (q *orderLimitOffsetQuery) setOffset(n int64) {
 }
 
 func (q *orderLimitOffsetQuery) appendLimitOffset(gen schema.QueryGen, b []byte) (_ []byte, err error) {
-	if gen.Dialect().Features().Has(feature.OffsetFetch) {
-		if q.limit > 0 && q.offset > 0 {
-			b = append(b, " OFFSET "...)
-			b = strconv.AppendInt(b, int64(q.offset), 10)
-			b = append(b, " ROWS"...)
-
-			b = append(b, " FETCH NEXT "...)
-			b = strconv.AppendInt(b, int64(q.limit), 10)
-			b = append(b, " ROWS ONLY"...)
-		} else if q.limit > 0 {
-			b = append(b, " OFFSET 0 ROWS"...)
-
-			b = append(b, " FETCH NEXT "...)
-			b = strconv.AppendInt(b, int64(q.limit), 10)
-			b = append(b, " ROWS ONLY"...)
-		} else if q.offset > 0 {
-			b = append(b, " OFFSET "...)
-			b = strconv.AppendInt(b, int64(q.offset), 10)
-			b = append(b, " ROWS"...)
-		}
-	} else {
-		if q.limit > 0 {
-			b = append(b, " LIMIT "...)
-			b = strconv.AppendInt(b, int64(q.limit), 10)
-		}
-		if q.offset > 0 {
-			b = append(b, " OFFSET "...)
-			b = strconv.AppendInt(b, int64(q.offset), 10)
-		}
+	if q.limit > 0 {
+		b = append(b, " LIMIT "...)
+		b = strconv.AppendInt(b, int64(q.limit), 10)
 	}
-
+	if q.offset > 0 {
+		b = append(b, " OFFSET "...)
+		b = strconv.AppendInt(b, int64(q.offset), 10)
+	}
 	return b, nil
 }
 

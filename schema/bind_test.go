@@ -10,23 +10,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/vmihailenco/msgpack/v5"
-
-	"github.com/piprim/pgcrud/dialect"
 )
-
-// bindTestDialect is a non-nop dialect so AppendQuery substitutes ? args.
-type bindTestDialect struct {
-	*nopDialect
-	uintAsInt bool
-}
-
-func (bindTestDialect) Name() dialect.Name { return dialect.PG }
-func (d bindTestDialect) UintAsInt() bool  { return d.uintAsInt }
 
 func newBindGen() (QueryGen, *ArgList) {
 	list := NewArgList()
-	return NewQueryGen(bindTestDialect{nopDialect: newNopDialect()}).WithArgList(list), list
+	return NewQueryGen(NewTables(nil), false).WithArgList(list), list
 }
 
 func TestAppendBindsScalars(t *testing.T) {
@@ -108,7 +96,7 @@ func TestAppendUintAsInt(t *testing.T) {
 
 	t.Run("on: uint32 wraps to int32 and uint64 to int64", func(t *testing.T) {
 		list := NewArgList()
-		gen := NewQueryGen(bindTestDialect{nopDialect: newNopDialect(), uintAsInt: true}).WithArgList(list)
+		gen := NewQueryGen(NewTables(nil), true).WithArgList(list)
 		gen.Append(nil, uint32(4294967295))
 		gen.Append(nil, uint64(18446744073709551615))
 		require.Equal(t, []any{int32(-1), int64(-1)}, list.Args())
@@ -116,7 +104,7 @@ func TestAppendUintAsInt(t *testing.T) {
 
 	t.Run("on: reflected uint32 field value wraps too", func(t *testing.T) {
 		list := NewArgList()
-		gen := NewQueryGen(bindTestDialect{nopDialect: newNopDialect(), uintAsInt: true}).WithArgList(list)
+		gen := NewQueryGen(NewTables(nil), true).WithArgList(list)
 		gen.AppendValue(nil, reflect.ValueOf(uint32(4294967295)))
 		require.Equal(t, []any{int32(-1)}, list.Args())
 	})
@@ -168,7 +156,7 @@ func TestAppendQueryPlaceholders(t *testing.T) {
 	})
 
 	t.Run("without a list the template keeps question marks", func(t *testing.T) {
-		gen := NewQueryGen(bindTestDialect{nopDialect: newNopDialect()})
+		gen := NewQueryGen(NewTables(nil), false)
 		got := gen.AppendQuery(nil, "a = ? AND b = ?", 1, "x")
 		require.Equal(t, "a = ? AND b = ?", string(got))
 	})
@@ -247,14 +235,13 @@ func TestAppendBindsComposites(t *testing.T) {
 
 func TestFieldAppendValue(t *testing.T) {
 	type Model struct {
-		ID      int64  `bun:",pk"`
-		Name    string `bun:",nullzero"`
-		Note    *string
-		Meta    map[string]int `bun:",type:jsonb"`
-		Payload map[string]int `bun:",msgpack"`
-		Tags    []string       `bun:",array"`
+		ID   int64  `bun:",pk"`
+		Name string `bun:",nullzero"`
+		Note *string
+		Meta map[string]int `bun:",type:jsonb"`
+		Tags []string       `bun:",array"`
 	}
-	tables := NewTables(bindTestDialect{nopDialect: newNopDialect()})
+	tables := NewTables(nil)
 	table := tables.Get(reflect.TypeFor[*Model]())
 
 	field := func(name string) *Field {
@@ -301,24 +288,4 @@ func TestFieldAppendValue(t *testing.T) {
 		require.Equal(t, []any{[]byte(`{"a":1}`)}, list.Args())
 	})
 
-	t.Run("msgpack field binds msgpack bytes", func(t *testing.T) {
-		gen, list := newBindGen()
-		field("payload").AppendValue(gen, nil, reflect.ValueOf(Model{Payload: map[string]int{"a": 1}}))
-		require.Len(t, list.Args(), 1)
-		raw, ok := list.Args()[0].([]byte)
-		require.True(t, ok)
-		var back map[string]int
-		require.NoError(t, msgpack.Unmarshal(raw, &back))
-		require.Equal(t, map[string]int{"a": 1}, back)
-	})
-}
-
-func TestDialectHasNoValueAppenders(t *testing.T) {
-	t.Run("Dialect interface no longer carries value appenders", func(t *testing.T) {
-		typ := reflect.TypeFor[Dialect]()
-		for _, name := range []string{"AppendString", "AppendBytes", "AppendJSON", "AppendTime", "AppendBool", "AppendUint32", "AppendUint64"} {
-			_, found := typ.MethodByName(name)
-			require.False(t, found, name)
-		}
-	})
 }

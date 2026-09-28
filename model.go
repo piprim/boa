@@ -171,7 +171,7 @@ func newTableModelIndex(
 	if typ.Kind() == reflect.Struct {
 		return &structTableModel{
 			db:    db,
-			table: table.Dialect().Tables().Get(typ),
+			table: db.Table(typ),
 			rel:   rel,
 
 			root:  root,
@@ -185,7 +185,7 @@ func newTableModelIndex(
 			m := sliceTableModel{
 				structTableModel: structTableModel{
 					db:    db,
-					table: table.Dialect().Tables().Get(structType),
+					table: db.Table(structType),
 					rel:   rel,
 
 					root:  root,

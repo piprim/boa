@@ -452,12 +452,6 @@ func TestQuery(t *testing.T) {
 			},
 		},
 		{
-			id: 55,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewInsert().Replace().Model(new(Model))
-			},
-		},
-		{
 			id: 56,
 			query: func(db *pgcrud.DB) schema.QueryAppender {
 				models := []*Model{
@@ -774,12 +768,6 @@ func TestQuery(t *testing.T) {
 			},
 		},
 		{
-			id: 97,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewInsert().Model(&Model{Str: "hello"}).On("DUPLICATE KEY UPDATE")
-			},
-		},
-		{
 			id: 99,
 			query: func(db *pgcrud.DB) schema.QueryAppender {
 				models := []Model{
@@ -1046,119 +1034,6 @@ func TestQuery(t *testing.T) {
 			},
 		},
 		{
-			id: 131,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(&Model{}).ColumnExpr("?PKs").UseIndex("ix1", "ix2")
-			},
-		},
-		{
-			id: 132,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(new(Story)).Relation("User").UseIndexForJoin("ix1")
-			},
-		},
-		{
-			id: 133,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(&Model{}).Order("model.str ASC").UseIndexForOrderBy("ix1")
-			},
-		},
-		{
-			id: 134,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().
-					Model(&Model{}).
-					ColumnExpr("SUM(model.id) AS total_ids").
-					Column("model.str").
-					Group("model.str").
-					UseIndexForGroupBy("ix1")
-			},
-		},
-		{
-			id: 135,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewUpdate().Model(&Model{
-					ID:  1,
-					Str: "hello",
-				}).UseIndex("ix1", "ix2").Where("id = 3")
-			},
-		},
-		{
-			id: 136,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(&Model{}).ColumnExpr("?PKs").IgnoreIndex("ix1", "ix2")
-			},
-		},
-		{
-			id: 137,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(new(Story)).Relation("User").IgnoreIndexForJoin("ix1")
-			},
-		},
-		{
-			id: 138,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(&Model{}).Order("model.str ASC").IgnoreIndexForOrderBy("ix1")
-			},
-		},
-		{
-			id: 139,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().
-					Model(&Model{}).
-					ColumnExpr("SUM(model.id) AS total_ids").
-					Column("model.str").
-					Group("model.str").
-					IgnoreIndexForGroupBy("ix1")
-			},
-		},
-		{
-			id: 140,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewUpdate().Model(&Model{
-					ID:  1,
-					Str: "hello",
-				}).IgnoreIndex("ix1", "ix2").Where("id = 3")
-			},
-		},
-		{
-			id: 141,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(&Model{}).ColumnExpr("?PKs").ForceIndex("ix1", "ix2")
-			},
-		},
-		{
-			id: 142,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(new(Story)).Relation("User").ForceIndexForJoin("ix1")
-			},
-		},
-		{
-			id: 143,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(&Model{}).Order("model.str ASC").ForceIndexForOrderBy("ix1")
-			},
-		},
-		{
-			id: 144,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().
-					Model(&Model{}).
-					ColumnExpr("SUM(model.id) AS total_ids").
-					Column("model.str").Group("model.str").
-					ForceIndexForGroupBy("ix1")
-			},
-		},
-		{
-			id: 145,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewUpdate().Model(&Model{
-					ID:  1,
-					Str: "hello",
-				}).ForceIndex("ix1", "ix2").Where("id = 3")
-			},
-		},
-		{
 			id: 146,
 			query: func(db *pgcrud.DB) schema.QueryAppender {
 				return db.NewSelect().
@@ -1184,23 +1059,6 @@ func TestQuery(t *testing.T) {
 					Model((*Model)(nil)).
 					Order("id DESC").
 					Offset(20)
-			},
-		},
-		{
-			id: 149,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewSelect().Model(&Model{}).ColumnExpr("?PKs").
-					UseIndex("ix1", "ix2").
-					UseIndex("ix3")
-			},
-		},
-		{
-			id: 150,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				return db.NewUpdate().Model(&Model{
-					ID:  1,
-					Str: "hello",
-				}).UseIndex("ix1", "ix2").UseIndex("ix3").Where("id = 3")
 			},
 		},
 		{
@@ -1302,35 +1160,6 @@ func TestQuery(t *testing.T) {
 					IsDefault        bool `bun:"column:default"`
 				}
 				return db.NewInsert().Model(new(Model))
-			},
-		},
-		{
-			id: 168,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				// DELETE ... ORDER BY ... (MySQL, MariaDB)
-				return db.NewDelete().Model(new(Model)).WherePK().Order("id")
-			},
-		},
-		{
-			id: 169,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				// DELETE ... ORDER BY ... LIMIT ... (MySQL, MariaDB)
-				return db.NewDelete().Model(new(Model)).WherePK().Order("id").Limit(1)
-			},
-		},
-		{
-			id: 170,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				// DELETE ... USING ... ORDER BY ... LIMIT ... (MySQL, MariaDB)
-				return db.NewDelete().Model(new(Story)).TableExpr("archived_stories AS src").
-					Where("src.id = story.id").Order("src.id").Limit(1)
-			},
-		},
-		{
-			id: 171,
-			query: func(db *pgcrud.DB) schema.QueryAppender {
-				// UPDATE ... SET ... ORDER BY ... LIMIT ... (MySQL, MariaDB)
-				return db.NewUpdate().Model(new(Story)).Set("name = ?", "new-name").WherePK().Order("id").Limit(1)
 			},
 		},
 		{

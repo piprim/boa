@@ -31,7 +31,6 @@ CREATE TABLE kitchen (
 	period     tstzrange,
 	addr       inet,
 	blob       bytea,
-	packed     bytea,
 	label      text,
 	rank       int4,
 	ratio      float8,
@@ -116,7 +115,6 @@ type Kitchen struct {
 	Period   pgdialect.Range[time.Time]
 	Addr     net.IP
 	Blob     []byte
-	Packed   map[string]int `bun:",msgpack"`
 	Label    string
 	Rank     int32
 	Ratio    float64

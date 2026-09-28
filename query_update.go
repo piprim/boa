@@ -7,9 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/dialect"
-
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/internal"
 	"github.com/piprim/pgcrud/schema"
 )
@@ -17,10 +14,8 @@ import (
 // UpdateQuery builds SQL UPDATE statements.
 type UpdateQuery struct {
 	whereBaseQuery
-	orderLimitOffsetQuery
 	returningQuery
 	setQuery
-	idxHintsQuery
 
 	joins   []joinQuery
 	comment string
@@ -114,9 +109,6 @@ func (q *UpdateQuery) Set(query string, args ...any) *UpdateQuery {
 }
 
 func (q *UpdateQuery) SetColumn(column string, query string, args ...any) *UpdateQuery {
-	if q.db.HasFeature(feature.UpdateMultiTable) {
-		column = q.table.Alias + "." + column
-	}
 	q.addSet(schema.SafeQuery(column+" = "+query, args))
 	return q
 }
@@ -204,36 +196,6 @@ func (q *UpdateQuery) WhereAllWithDeleted() *UpdateQuery {
 	return q
 }
 
-// ------------------------------------------------------------------------------
-func (q *UpdateQuery) Order(orders ...string) *UpdateQuery {
-	if !q.hasFeature(feature.UpdateOrderLimit) {
-		q.setErr(feature.NewNotSupportError(feature.UpdateOrderLimit))
-		return q
-	}
-	q.addOrder(orders...)
-	return q
-}
-
-func (q *UpdateQuery) OrderExpr(query string, args ...any) *UpdateQuery {
-	if !q.hasFeature(feature.UpdateOrderLimit) {
-		q.setErr(feature.NewNotSupportError(feature.UpdateOrderLimit))
-		return q
-	}
-	q.addOrderExpr(query, args...)
-	return q
-}
-
-func (q *UpdateQuery) Limit(n int64) *UpdateQuery {
-	if !q.hasFeature(feature.UpdateOrderLimit) {
-		q.setErr(feature.NewNotSupportError(feature.UpdateOrderLimit))
-		return q
-	}
-	q.setLimit(n)
-	return q
-}
-
-//------------------------------------------------------------------------------
-
 // Returning adds a RETURNING clause to the query.
 //
 // To suppress the auto-generated RETURNING clause, use `Returning("NULL")`.
@@ -272,18 +234,7 @@ func (q *UpdateQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 
 	b = append(b, "UPDATE "...)
 
-	if gen.HasFeature(feature.UpdateMultiTable) {
-		b, err = q.appendTablesWithAlias(gen, b)
-	} else if gen.HasFeature(feature.UpdateTableAlias) {
-		b, err = q.appendFirstTableWithAlias(gen, b)
-	} else {
-		b, err = q.appendFirstTable(gen, b)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	b, err = q.appendIndexHints(gen, b)
+	b, err = q.appendFirstTableWithAlias(gen, b)
 	if err != nil {
 		return nil, err
 	}
@@ -293,11 +244,9 @@ func (q *UpdateQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		return nil, err
 	}
 
-	if !gen.HasFeature(feature.UpdateMultiTable) {
-		b, err = q.appendOtherTables(gen, b)
-		if err != nil {
-			return nil, err
-		}
+	b, err = q.appendOtherTables(gen, b)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, j := range q.joins {
@@ -307,30 +256,12 @@ func (q *UpdateQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		}
 	}
 
-	if q.hasFeature(feature.Output) && q.hasReturning() {
-		b = append(b, " OUTPUT "...)
-		b, err = q.appendOutput(gen, b)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	b, err = q.mustAppendWhere(gen, b, q.hasTableAlias(gen))
+	b, err = q.mustAppendWhere(gen, b, true)
 	if err != nil {
 		return nil, err
 	}
 
-	b, err = q.appendOrder(gen, b)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err = q.appendLimitOffset(gen, b)
-	if err != nil {
-		return nil, err
-	}
-
-	if q.hasFeature(feature.Returning) && q.hasReturning() {
+	if q.hasReturning() {
 		b = append(b, " RETURNING "...)
 		b, err = q.appendReturning(gen, b)
 		if err != nil {
@@ -451,10 +382,6 @@ func (q *UpdateQuery) updateSliceSet(
 			b = append(b, ", "...)
 			pos = len(b)
 		}
-		if gen.HasFeature(feature.UpdateMultiTable) {
-			b = append(b, model.table.SQLAlias...)
-			b = append(b, '.')
-		}
 		b = append(b, field.SQLName...)
 		b = append(b, " = _data."...)
 		b = append(b, field.SQLName...)
@@ -468,11 +395,7 @@ func (q *UpdateQuery) updateSliceWhere(gen schema.QueryGen, model *sliceTableMod
 		if i > 0 {
 			b = append(b, " AND "...)
 		}
-		if q.hasTableAlias(gen) {
-			b = append(b, model.table.SQLAlias...)
-		} else {
-			b = append(b, model.table.SQLName...)
-		}
+		b = append(b, model.table.SQLAlias...)
 		b = append(b, '.')
 		b = append(b, pk.SQLName...)
 		b = append(b, " = _data."...)
@@ -519,7 +442,7 @@ func (q *UpdateQuery) scanOrExec(
 		return pgconn.CommandTag{}, q.db.failBuild(ctx, q, q.model, err)
 	}
 
-	useScan := hasDest || (q.hasReturning() && q.hasFeature(feature.Returning|feature.Output))
+	useScan := hasDest || q.hasReturning()
 	var model Model
 
 	if useScan {
@@ -577,14 +500,7 @@ func (q *UpdateQuery) FQN(column string) Ident {
 	if q.table == nil {
 		panic("UpdateQuery.FQN requires a model")
 	}
-	if q.hasTableAlias(q.db.gen) {
-		return Ident(q.table.Alias + "." + column)
-	}
-	return Ident(q.table.Name + "." + column)
-}
-
-func (q *UpdateQuery) hasTableAlias(gen schema.QueryGen) bool {
-	return gen.HasFeature(feature.UpdateMultiTable | feature.UpdateTableAlias)
+	return Ident(q.table.Alias + "." + column)
 }
 
 // Build renders the query and returns the SQL with $n placeholders together
@@ -663,27 +579,4 @@ func (q *updateQueryBuilder) WherePK(cols ...string) QueryBuilder {
 
 func (q *updateQueryBuilder) Unwrap() any {
 	return q.UpdateQuery
-}
-
-//------------------------------------------------------------------------------
-
-func (q *UpdateQuery) UseIndex(indexes ...string) *UpdateQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addUseIndex(indexes...)
-	}
-	return q
-}
-
-func (q *UpdateQuery) IgnoreIndex(indexes ...string) *UpdateQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addIgnoreIndex(indexes...)
-	}
-	return q
-}
-
-func (q *UpdateQuery) ForceIndex(indexes ...string) *UpdateQuery {
-	if q.db.dialect.Name() == dialect.MySQL {
-		q.addForceIndex(indexes...)
-	}
-	return q
 }

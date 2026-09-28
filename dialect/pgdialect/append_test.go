@@ -23,7 +23,7 @@ func TestHStoreAppender(t *testing.T) {
 		{map[string]string{"1": "NULL"}, []string{`"1"=>"NULL"`}},
 	}
 
-	appendFunc := pgDialect.hstoreAppender(reflect.TypeFor[map[string]string]())
+	appendFunc := hstoreAppender(reflect.TypeFor[map[string]string]())
 
 	for i, test := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {

@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/dialect/pgdialect"
 	"github.com/piprim/pgcrud/internal"
 	"github.com/piprim/pgcrud/schema"
@@ -105,7 +104,7 @@ type DB struct {
 type noCopyState struct {
 	pool     *pgxpool.Pool
 	resolver ExecutorResolver
-	dialect  schema.Dialect
+	dialect  *pgdialect.Dialect
 
 	execMode      pgx.QueryExecMode
 	hasExecMode   bool
@@ -126,7 +125,7 @@ func New(pool *pgxpool.Pool, opts ...DBOption) *DB {
 			dialect:       dialect,
 			resultFormats: textResultFormats(),
 		},
-		gen: schema.NewQueryGen(dialect),
+		gen: schema.NewQueryGen(dialect.Tables(), dialect.UintAsInt()),
 	}
 
 	for _, opt := range opts {
@@ -138,7 +137,7 @@ func New(pool *pgxpool.Pool, opts ...DBOption) *DB {
 
 // String returns a string representation of the DB showing its dialect.
 func (db *DB) String() string {
-	return "DB<dialect=" + db.dialect.Name().String() + ">"
+	return "DB<dialect=pg>"
 }
 
 // Pool returns the pool passed to New. It may be nil.
@@ -331,7 +330,7 @@ func (db *DB) NewRaw(query string, args ...any) *RawQuery {
 }
 
 // Dialect returns the database dialect being used.
-func (db *DB) Dialect() schema.Dialect {
+func (db *DB) Dialect() *pgdialect.Dialect {
 	return db.dialect
 }
 
@@ -418,15 +417,7 @@ func (db *DB) WithQueryHook(hook QueryHook) *DB {
 
 // UpdateFQN returns a fully qualified column name for UPDATE statements.
 func (db *DB) UpdateFQN(alias, column string) Ident {
-	if db.HasFeature(feature.UpdateMultiTable) {
-		return Ident(alias + "." + column)
-	}
 	return Ident(column)
-}
-
-// HasFeature reports whether the dialect supports this feature.
-func (db *DB) HasFeature(feat feature.Feature) bool {
-	return db.dialect.Features().Has(feat)
 }
 
 //------------------------------------------------------------------------------
@@ -499,5 +490,5 @@ type errRow struct{ err error }
 func (r errRow) Scan(...any) error { return r.err }
 
 func (db *DB) makeQueryBytes() []byte {
-	return internal.MakeQueryBytes()
+	return make([]byte, 0, 4096)
 }

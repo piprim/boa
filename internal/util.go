@@ -46,16 +46,6 @@ func MakeSliceNextElemFunc(v reflect.Value) func() reflect.Value {
 	}
 }
 
-func Unwrap(err error) error {
-	u, ok := err.(interface {
-		Unwrap() error
-	})
-	if !ok {
-		return nil
-	}
-	return u.Unwrap()
-}
-
 func FieldByIndexAlloc(v reflect.Value, index []int) reflect.Value {
 	if len(index) == 1 {
 		return v.Field(index[0])
@@ -78,10 +68,4 @@ func indirectNil(v reflect.Value) reflect.Value {
 		v = v.Elem()
 	}
 	return v
-}
-
-// MakeQueryBytes returns zero-length byte slice with capacity of 4096.
-func MakeQueryBytes() []byte {
-	// TODO: make this configurable?
-	return make([]byte, 0, 4096)
 }

@@ -130,8 +130,3 @@ func (e *fakeExecutor) QueryRow(ctx context.Context, sql string, args ...any) pg
 	}
 	return fakeRow{rows: e.rows}
 }
-
-func (e *fakeExecutor) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
-	e.calls = append(e.calls, call{"SendBatch", "", nil})
-	return nil
-}

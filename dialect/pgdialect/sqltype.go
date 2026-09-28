@@ -11,34 +11,10 @@ import (
 )
 
 const (
-	// Date / Time
-	pgTypeTimestamp       = "TIMESTAMP"                // Timestamp
-	pgTypeTimestampWithTz = "TIMESTAMP WITH TIME ZONE" // Timestamp with a time zone
-	pgTypeTimestampTz     = "TIMESTAMPTZ"              // Timestamp with a time zone (alias)
-	pgTypeDate            = "DATE"                     // Date
-	pgTypeTime            = "TIME"                     // Time without a time zone
-	pgTypeTimeTz          = "TIME WITH TIME ZONE"      // Time with a time zone
-	pgTypeInterval        = "INTERVAL"                 // Time interval
-
-	// Network Addresses
-	pgTypeInet    = "INET"    // IPv4 or IPv6 hosts and networks
-	pgTypeCidr    = "CIDR"    // IPv4 or IPv6 networks
-	pgTypeMacaddr = "MACADDR" // MAC addresses
-
-	// Serial Types
-	pgTypeSmallSerial = "SMALLSERIAL" // 2 byte autoincrementing integer
-	pgTypeSerial      = "SERIAL"      // 4 byte autoincrementing integer
-	pgTypeBigSerial   = "BIGSERIAL"   // 8 byte autoincrementing integer
-
-	// Character Types
-	pgTypeChar             = "CHAR"              // fixed length string (blank padded)
-	pgTypeCharacter        = "CHARACTER"         // alias for CHAR
-	pgTypeText             = "TEXT"              // variable length string without limit
-	pgTypeVarchar          = "VARCHAR"           // variable length string with optional limit
-	pgTypeCharacterVarying = "CHARACTER VARYING" // alias for VARCHAR
-
-	// Binary Data Types
-	pgTypeBytea = "BYTEA" // binary string
+	pgTypeTimestampTz = "TIMESTAMPTZ" // Timestamp with a time zone
+	pgTypeInet        = "INET"        // IPv4 or IPv6 hosts and networks
+	pgTypeCidr        = "CIDR"        // IPv4 or IPv6 networks
+	pgTypeBytea       = "BYTEA"       // binary string
 )
 
 var (
@@ -47,14 +23,6 @@ var (
 	jsonRawMessageType = reflect.TypeFor[json.RawMessage]()
 	nullStringType     = reflect.TypeFor[sql.NullString]()
 )
-
-func (d *Dialect) DefaultVarcharLen() int {
-	return 0
-}
-
-func (d *Dialect) DefaultSchema() string {
-	return "public"
-}
 
 func fieldSQLType(field *schema.Field) string {
 	if field.UserSQLType != "" {

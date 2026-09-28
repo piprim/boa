@@ -23,12 +23,12 @@ func appendTime(buf []byte, tm time.Time) []byte {
 
 var mapStringStringType = reflect.TypeOf(map[string]string(nil))
 
-func (d *Dialect) hstoreAppender(typ reflect.Type) schema.AppenderFunc {
+func hstoreAppender(typ reflect.Type) schema.AppenderFunc {
 	kind := typ.Kind()
 
 	switch kind {
 	case reflect.Pointer:
-		if fn := d.hstoreAppender(typ.Elem()); fn != nil {
+		if fn := hstoreAppender(typ.Elem()); fn != nil {
 			return schema.PtrAppender(fn)
 		}
 	case reflect.Map:

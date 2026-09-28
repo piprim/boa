@@ -54,8 +54,7 @@ type link struct {
 }
 
 func TestNestedRelationWithSharedComposition(t *testing.T) {
-	dialect := newNopDialect()
-	tables := NewTables(dialect)
+	tables := NewTables(nil)
 
 	// Initialize Link table, which triggers circular initialization:
 	// Link -> AgentRelation -> Agent -> BusinessRelation -> Business

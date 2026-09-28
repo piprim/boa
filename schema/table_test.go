@@ -8,8 +8,7 @@ import (
 )
 
 func TestTable(t *testing.T) {
-	dialect := newNopDialect()
-	tables := NewTables(dialect)
+	tables := NewTables(nil)
 
 	t.Run("simple", func(t *testing.T) {
 		type Model struct {
@@ -364,10 +363,10 @@ func TestTable(t *testing.T) {
 			Extra bool `bun:"extra"`
 		}
 
-		dialect := newNopDialect()
-		dialect.Tables().Register((*OrderToItem)(nil))
+		tables := NewTables(nil)
+		tables.Register((*OrderToItem)(nil))
 
-		outer := dialect.Tables().Get(reflect.TypeOf((*OrderWrap)(nil)).Elem())
+		outer := tables.Get(reflect.TypeOf((*OrderWrap)(nil)).Elem())
 
 		id, ok := outer.FieldMap["id"]
 		require.True(t, ok)
@@ -407,11 +406,11 @@ func TestTable(t *testing.T) {
 			Items   []Item `bun:"m2m:order_to_items,join:Order=Item"`
 		}
 
-		dialect := newNopDialect()
-		dialect.Tables().Register((*OrderToItem)(nil))
+		tables := NewTables(nil)
+		tables.Register((*OrderToItem)(nil))
 
 		require.PanicsWithError(t, "pgcrud: OrderToItem belongs-to Order: OrderWrap must have column id", func() {
-			dialect.Tables().Get(reflect.TypeOf((*OrderWrap)(nil)).Elem())
+			tables.Get(reflect.TypeOf((*OrderWrap)(nil)).Elem())
 		})
 	})
 }

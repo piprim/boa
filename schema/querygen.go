@@ -8,24 +8,26 @@ import (
 	"time"
 
 	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/internal/parser"
 )
 
-var nopQueryGen = QueryGen{
-	dialect: newNopDialect(),
-}
+var nopQueryGen = QueryGen{tables: NewTables(nil), nop: true}
 
+// QueryGen renders SQL fragments. tables resolves struct models used as
+// named arguments; nop marks the template generator that writes ? in place
+// of bound values.
 type QueryGen struct {
-	dialect Dialect
-	args    *namedArgList
-	bound   *ArgList
+	tables    *Tables
+	uintAsInt bool
+	nop       bool
+	args      *namedArgList
+	bound     *ArgList
 }
 
-func NewQueryGen(dialect Dialect) QueryGen {
-	return QueryGen{
-		dialect: dialect,
-	}
+// NewQueryGen returns a generator over tables. uintAsInt binds unsigned
+// values as the signed type of the same width, see pgdialect.WithAppendUintAsInt.
+func NewQueryGen(tables *Tables, uintAsInt bool) QueryGen {
+	return QueryGen{tables: tables, uintAsInt: uintAsInt}
 }
 
 func NewNopQueryGen() QueryGen {
@@ -33,15 +35,15 @@ func NewNopQueryGen() QueryGen {
 }
 
 func (f QueryGen) IsNop() bool {
-	return f.dialect.Name() == dialect.Invalid
+	return f.nop
 }
 
-func (f QueryGen) Dialect() Dialect {
-	return f.dialect
+func (f QueryGen) Tables() *Tables {
+	return f.tables
 }
 
 func (f QueryGen) IdentQuote() byte {
-	return f.dialect.IdentQuote()
+	return '"'
 }
 
 // Append writes v into b as a bound parameter, or inline when v is a SQL
@@ -70,7 +72,7 @@ func (gen QueryGen) Append(b []byte, v any) []byte {
 		if vv.Kind() == reflect.Pointer && vv.IsNil() {
 			return dialect.AppendNull(b)
 		}
-		appender := Appender(gen.Dialect(), vv.Type())
+		appender := Appender(vv.Type())
 		return appender(gen, b, vv)
 	}
 }
@@ -87,28 +89,17 @@ func (f QueryGen) AppendValue(b []byte, v reflect.Value) []byte {
 	if v.Kind() == reflect.Pointer && v.IsNil() {
 		return dialect.AppendNull(b)
 	}
-	appender := Appender(f.dialect, v.Type())
+	appender := Appender(v.Type())
 	return appender(f, b, v)
 }
 
-func (f QueryGen) HasFeature(feature feature.Feature) bool {
-	return f.dialect.Features().Has(feature)
-}
-
 func (f QueryGen) WithArg(arg NamedArgAppender) QueryGen {
-	return QueryGen{
-		dialect: f.dialect,
-		args:    f.args.WithArg(arg),
-		bound:   f.bound,
-	}
+	f.args = f.args.WithArg(arg)
+	return f
 }
 
 func (f QueryGen) WithNamedArg(name string, value any) QueryGen {
-	return QueryGen{
-		dialect: f.dialect,
-		args:    f.args.WithArg(&namedArg{name: name, value: value}),
-		bound:   f.bound,
-	}
+	return f.WithArg(&namedArg{name: name, value: value})
 }
 
 func (f QueryGen) AppendQuery(dst []byte, query string, args ...any) []byte {
@@ -268,7 +259,7 @@ func newStructArgs(gen QueryGen, strct any) (*structArgs, bool) {
 	}
 
 	return &structArgs{
-		table: gen.Dialect().Tables().Get(v.Type()),
+		table: gen.Tables().Get(v.Type()),
 		strct: v,
 	}, true
 }

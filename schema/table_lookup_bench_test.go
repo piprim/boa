@@ -30,7 +30,7 @@ type benchBook struct {
 // joined struct ("author__name") miss FieldMap and take the slow path, which
 // walks StructMap and clones the field on every call.
 func BenchmarkLookupFieldPrefixed(b *testing.B) {
-	table := NewTables(newNopDialect()).Get(reflect.TypeFor[*benchBook]())
+	table := NewTables(nil).Get(reflect.TypeFor[*benchBook]())
 
 	names := []string{
 		"author__id",
@@ -54,7 +54,7 @@ func BenchmarkLookupFieldPrefixed(b *testing.B) {
 // Direct hits already return a shared *Field; kept as a baseline so the two
 // paths can be compared side by side.
 func BenchmarkLookupFieldDirect(b *testing.B) {
-	table := NewTables(newNopDialect()).Get(reflect.TypeFor[*benchBook]())
+	table := NewTables(nil).Get(reflect.TypeFor[*benchBook]())
 
 	names := []string{"id", "title", "subtitle", "author_id"}
 

@@ -4,23 +4,23 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-
-	"github.com/puzpuzpuz/xsync/v3"
 )
 
+// Tables is the registry of struct models. onTable, when set, runs once per
+// table after its fields and relations are known; pgdialect uses it to attach
+// the array and hstore codecs.
 type Tables struct {
-	dialect Dialect
+	onTable func(*Table)
 
 	mu     sync.Mutex
-	tables *xsync.MapOf[reflect.Type, *Table]
+	tables sync.Map // reflect.Type -> *Table
 
 	inProgress map[reflect.Type]*Table
 }
 
-func NewTables(dialect Dialect) *Tables {
+func NewTables(onTable func(*Table)) *Tables {
 	return &Tables{
-		dialect:    dialect,
-		tables:     xsync.NewMapOf[reflect.Type, *Table](),
+		onTable:    onTable,
 		inProgress: make(map[reflect.Type]*Table),
 	}
 }
@@ -38,26 +38,25 @@ func (t *Tables) Get(typ reflect.Type) *Table {
 	}
 
 	if v, ok := t.tables.Load(typ); ok {
-		return v
+		return v.(*Table)
 	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if v, ok := t.tables.Load(typ); ok {
-		return v
+		return v.(*Table)
 	}
 
 	table := t.InProgress(typ)
 	table.initRelations()
 
-	t.dialect.OnTable(table)
+	if t.onTable != nil {
+		t.onTable(table)
+	}
 	for _, field := range table.FieldMap {
 		if field.UserSQLType == "" {
 			field.UserSQLType = field.DiscoveredSQLType
-		}
-		if field.CreateTableSQLType == "" {
-			field.CreateTableSQLType = field.UserSQLType
 		}
 	}
 
@@ -72,7 +71,7 @@ func (t *Tables) Get(typ reflect.Type) *Table {
 // entries in circular dependency chains.
 func (t *Tables) InProgress(typ reflect.Type) *Table {
 	table := t.Placeholder(typ)
-	table.init(t.dialect, typ)
+	table.init(t, typ)
 	return table
 }
 
@@ -89,22 +88,18 @@ func (t *Tables) Placeholder(typ reflect.Type) *Table {
 
 // ByModel gets the table by its Go name.
 func (t *Tables) ByModel(name string) *Table {
-	var found *Table
-	t.tables.Range(func(typ reflect.Type, table *Table) bool {
-		if table.TypeName == name {
-			found = table
-			return false
-		}
-		return true
-	})
-	return found
+	return t.find(func(table *Table) bool { return table.TypeName == name })
 }
 
 // ByName gets the table by its SQL name.
 func (t *Tables) ByName(name string) *Table {
+	return t.find(func(table *Table) bool { return table.Name == name })
+}
+
+func (t *Tables) find(match func(*Table) bool) *Table {
 	var found *Table
-	t.tables.Range(func(typ reflect.Type, table *Table) bool {
-		if table.Name == name {
+	t.tables.Range(func(_, v any) bool {
+		if table := v.(*Table); match(table) {
 			found = table
 			return false
 		}
@@ -116,8 +111,8 @@ func (t *Tables) ByName(name string) *Table {
 // All returns all registered tables.
 func (t *Tables) All() []*Table {
 	var found []*Table
-	t.tables.Range(func(typ reflect.Type, table *Table) bool {
-		found = append(found, table)
+	t.tables.Range(func(_, v any) bool {
+		found = append(found, v.(*Table))
 		return true
 	})
 	return found

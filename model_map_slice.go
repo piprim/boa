@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/piprim/pgcrud/dialect/feature"
 	"github.com/piprim/pgcrud/schema"
 )
 
@@ -108,11 +107,7 @@ func (m *mapSliceModel) appendValues(gen schema.QueryGen, b []byte) (_ []byte, e
 	for i, el := range slice {
 		if i > 0 {
 			b = append(b, "), "...)
-			if m.db.HasFeature(feature.ValuesRow) {
-				b = append(b, "ROW("...)
-			} else {
-				b = append(b, '(')
-			}
+			b = append(b, '(')
 		}
 
 		for j, key := range m.keys {
@@ -120,7 +115,7 @@ func (m *mapSliceModel) appendValues(gen schema.QueryGen, b []byte) (_ []byte, e
 				b = append(b, ", "...)
 			}
 			b = gen.Append(b, el[key])
-			if cast := valuesCast(el[key]); cast != "" && m.db.HasFeature(feature.DoubleColonCast) {
+			if cast := valuesCast(el[key]); cast != "" {
 				b = append(b, "::"...)
 				b = append(b, cast...)
 			}

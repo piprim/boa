@@ -21,11 +21,6 @@ var Warn = &wrapper{
 	logger: Logger,
 }
 
-var Deprecated = &wrapper{
-	prefix: "DEPRECATED: pgcrud: ",
-	logger: Logger,
-}
-
 type logger struct {
 	log *log.Logger
 }
@@ -50,5 +45,4 @@ func SetLogger(newLogger Logging) {
 		Logger = newLogger
 	}
 	Warn.logger = Logger
-	Deprecated.logger = Logger
 }

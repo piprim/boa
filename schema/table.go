@@ -12,7 +12,7 @@ import (
 
 	"github.com/jinzhu/inflection"
 
-	"github.com/piprim/pgcrud/dialect/feature"
+	"github.com/piprim/pgcrud/dialect"
 	"github.com/piprim/pgcrud/internal"
 	"github.com/piprim/pgcrud/internal/tagparser"
 )
@@ -38,7 +38,7 @@ func SetTableNameInflector(fn func(string) string) {
 
 // Table represents a SQL table created from Go struct.
 type Table struct {
-	dialect Dialect
+	tables *Tables
 
 	// lookupCache memoizes LookupField results for dotted/prefixed column
 	// names (e.g. "author__name"). Those names miss FieldMap and take the
@@ -84,12 +84,12 @@ type structField struct {
 	Table *Table
 }
 
-func (table *Table) init(dialect Dialect, typ reflect.Type) {
+func (table *Table) init(tables *Tables, typ reflect.Type) {
 	if table.initStarted {
 		return
 	}
 	table.initStarted = true
-	table.dialect = dialect
+	table.tables = tables
 	table.Type = typ
 	table.ZeroValue = reflect.New(table.Type).Elem()
 	table.ZeroIface = reflect.New(table.Type).Interface()
@@ -99,7 +99,7 @@ func (table *Table) init(dialect Dialect, typ reflect.Type) {
 	table.setName(tableName)
 	table.Alias = table.ModelName
 	table.SQLAlias = table.quoteIdent(table.ModelName)
-	table.Schema = dialect.DefaultSchema()
+	table.Schema = "public"
 
 	table.Fields = make([]*Field, 0, typ.NumField())
 	table.FieldMap = make(map[string]*Field, typ.NumField())
@@ -166,7 +166,7 @@ func (t *Table) processFields(typ reflect.Type) {
 				continue
 			}
 
-			subtable := t.dialect.Tables().InProgress(sfType)
+			subtable := t.tables.InProgress(sfType)
 
 			for _, subfield := range subtable.allFields {
 				embedded = append(embedded, embeddedField{
@@ -211,7 +211,7 @@ func (t *Table) processFields(typ reflect.Type) {
 					t.TypeName, sf.Name, fieldType.Kind()))
 			}
 
-			subtable := t.dialect.Tables().InProgress(fieldType)
+			subtable := t.tables.InProgress(fieldType)
 			for _, subfield := range subtable.allFields {
 				embedded = append(embedded, embeddedField{
 					prefix:     prefix,
@@ -248,12 +248,12 @@ func (t *Table) processFields(typ reflect.Type) {
 			// triggering recursive initialization. This ensures that types in
 			// a circular dependency can find this entry during their own
 			// processFields, even if this table's init hasn't completed yet.
-			placeholder := t.dialect.Tables().Placeholder(field.IndirectType)
+			placeholder := t.tables.Placeholder(field.IndirectType)
 			t.StructMap[field.Name] = &structField{
 				Index: field.Index,
 				Table: placeholder,
 			}
-			t.dialect.Tables().InProgress(field.IndirectType)
+			t.tables.InProgress(field.IndirectType)
 		}
 	}
 
@@ -521,7 +521,7 @@ func (t *Table) processBaseModelField(f reflect.StructField) {
 // in case it is specified in the "schema"."table" format.
 // Assume default schema if one isn't explicitly specified.
 func (t *Table) schemaFromTagName(name string) (string, string) {
-	schema, table := t.dialect.DefaultSchema(), name
+	schema, table := "public", name
 	if schemaTable := strings.Split(name, "."); len(schemaTable) == 2 {
 		schema, table = schemaTable[0], schemaTable[1]
 	}
@@ -590,8 +590,8 @@ func (t *Table) newField(sf reflect.StructField, tag tagparser.Tag) *Field {
 		field.UserSQLType = s
 	}
 	field.DiscoveredSQLType = DiscoverSQLType(field.IndirectType)
-	field.Append = FieldAppender(t.dialect, field)
-	field.Scan = FieldScanner(t.dialect, field)
+	field.Append = FieldAppender(field)
+	field.Scan = FieldScanner(field)
 	field.IsZero = zeroChecker(field.StructField.Type)
 
 	return field
@@ -643,12 +643,12 @@ func (t *Table) addRelation(rel *Relation) {
 }
 
 func (t *Table) belongsToRelation(field *Field) *Relation {
-	joinTable := t.dialect.Tables().InProgress(field.IndirectType)
+	joinTable := t.tables.InProgress(field.IndirectType)
 	return t.belongsToRelationWithTables(field, joinTable, joinTable)
 }
 
 func (t *Table) belongsToRelationWithJoinTable(field *Field, joinPKTable *Table) *Relation {
-	joinTable := t.dialect.Tables().InProgress(field.IndirectType)
+	joinTable := t.tables.InProgress(field.IndirectType)
 	return t.belongsToRelationWithTables(field, joinTable, joinPKTable)
 }
 
@@ -667,10 +667,8 @@ func (t *Table) belongsToRelationWithTables(field *Field, joinTable, joinPKTable
 		rel.Condition = field.Tag.Options["join_on"]
 	}
 
-	if t.dialect.Features().Has(feature.FKDefaultOnAction) {
-		rel.OnUpdate = "ON UPDATE NO ACTION"
-		rel.OnDelete = "ON DELETE NO ACTION"
-	}
+	rel.OnUpdate = "ON UPDATE NO ACTION"
+	rel.OnDelete = "ON DELETE NO ACTION"
 	if onUpdate, ok := field.Tag.Options["on_update"]; ok {
 		if len(onUpdate) > 1 {
 			panic(fmt.Errorf("pgcrud: %s belongs-to %s: on_update option must be a single field", t.TypeName, field.GoName))
@@ -767,7 +765,7 @@ func (t *Table) hasOneRelation(field *Field) *Relation {
 		panic(err)
 	}
 
-	joinTable := t.dialect.Tables().InProgress(field.IndirectType)
+	joinTable := t.tables.InProgress(field.IndirectType)
 	rel := &Relation{
 		Type:      HasOneRelation,
 		Field:     field,
@@ -837,7 +835,7 @@ func (t *Table) hasManyRelation(field *Field) *Relation {
 		))
 	}
 
-	joinTable := t.dialect.Tables().InProgress(indirectType(field.IndirectType.Elem()))
+	joinTable := t.tables.InProgress(indirectType(field.IndirectType.Elem()))
 	polymorphicValue, isPolymorphic := field.Tag.Option("polymorphic")
 	rel := &Relation{
 		Type:      HasManyRelation,
@@ -931,7 +929,7 @@ func (t *Table) m2mRelation(field *Field) *Relation {
 			t.TypeName, field.GoName, field.IndirectType.Kind(),
 		))
 	}
-	joinTable := t.dialect.Tables().InProgress(indirectType(field.IndirectType.Elem()))
+	joinTable := t.tables.InProgress(indirectType(field.IndirectType.Elem()))
 
 	if err := t.CheckPKs(); err != nil {
 		panic(err)
@@ -945,7 +943,7 @@ func (t *Table) m2mRelation(field *Field) *Relation {
 		panic(fmt.Errorf("pgcrud: %s must have m2m tag option", field.GoName))
 	}
 
-	m2mTable := t.dialect.Tables().ByName(m2mTableName)
+	m2mTable := t.tables.ByName(m2mTableName)
 	if m2mTable == nil {
 		panic(fmt.Errorf(
 			"pgcrud: can't find m2m %s table (use db.RegisterModel)",
@@ -1011,8 +1009,6 @@ func (t *Table) markM2M() {
 
 //------------------------------------------------------------------------------
 
-func (t *Table) Dialect() Dialect { return t.dialect }
-
 func (t *Table) HasBeforeAppendModelHook() bool { return t.flags.Has(beforeAppendModelHookFlag) }
 
 func (t *Table) HasBeforeScanRowHook() bool { return t.flags.Has(beforeScanRowHookFlag) }
@@ -1040,7 +1036,7 @@ func (t *Table) quoteTableName(s string) Safe {
 }
 
 func (t *Table) quoteIdent(s string) Safe {
-	return Safe(NewQueryGen(t.dialect).AppendIdent(nil, s))
+	return Safe(dialect.AppendIdent(nil, s, '"'))
 }
 
 func isKnownTableOption(name string) bool {
@@ -1061,7 +1057,6 @@ func isKnownFieldOption(name string) bool {
 		"composite",
 		"multirange",
 		"json_use_number",
-		"msgpack",
 		"notnull",
 		"nullzero",
 		"default",

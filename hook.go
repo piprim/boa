@@ -24,8 +24,6 @@ type QueryEvent struct {
 	StartTime time.Time
 	Result    pgconn.CommandTag
 	Err       error
-
-	Stash map[any]any
 }
 
 // Operation returns the SQL operation name such as SELECT or UPDATE.
