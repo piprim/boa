@@ -51,6 +51,18 @@ func (s Ident) AppendQuery(gen QueryGen, b []byte) ([]byte, error) {
 	return gen.AppendIdent(b, string(s)), nil
 }
 
+// On returns the identifier qualified by alias, whatever qualified it before:
+// Ident("t.id").On("mandat") is written "mandat"."id". It names a column of a
+// joined table, whose alias in the query is not the alias of its model.
+func (s Ident) On(alias string) Ident {
+	name := string(s)
+	if i := strings.LastIndexByte(name, '.'); i >= 0 {
+		name = name[i+1:]
+	}
+
+	return Ident(alias + "." + name)
+}
+
 //------------------------------------------------------------------------------
 
 // QueryWithArgs is a query string paired with its arguments.
