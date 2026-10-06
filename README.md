@@ -60,6 +60,9 @@ the context. Reads still run on the pool.
 - `SelectQuery.Rows` returns `pgx.Rows`, so `pgx.CollectRows` works for projections that do
   not need the model scanner.
 - Model struct tags use the `boa:"..."` syntax.
+- PostgreSQL's `infinity` and `-infinity` dates are read as `boa.PosInfinity` and
+  `boa.NegInfinity`, and those two values are written back as `infinity` and `-infinity`.
+  Compare with `Equal`. A time inside an array is not translated.
 
 ## Tests
 

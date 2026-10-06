@@ -243,6 +243,53 @@ func TestIntegrationCRUD(t *testing.T) {
 	})
 }
 
+func TestIntegrationInfinity(t *testing.T) {
+	db, _ := testDB(t)
+	ctx := context.Background()
+
+	_, err := db.NewInsert().
+		Model(&[]*Author{
+			{Name: "forever", CreatedAt: boa.PosInfinity},
+			{Name: "always", CreatedAt: boa.NegInfinity},
+			{Name: "dated", CreatedAt: time.Date(2026, 9, 23, 10, 30, 0, 0, time.UTC)},
+		}).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	t.Run("the sentinels are stored as infinity and -infinity", func(t *testing.T) {
+		var stored []string
+		err := db.NewSelect().Model((*Author)(nil)).
+			ColumnExpr("created_at::text").
+			Where("name IN (?, ?)", "forever", "always").
+			OrderExpr("created_at DESC").
+			Scan(ctx, &stored)
+		require.NoError(t, err)
+		require.Equal(t, []string{"infinity", "-infinity"}, stored)
+	})
+
+	t.Run("infinity is read back as the sentinel", func(t *testing.T) {
+		var got Author
+		require.NoError(t, db.NewSelect().Model(&got).Where("name = ?", "forever").Scan(ctx))
+		require.True(t, got.CreatedAt.Equal(boa.PosInfinity))
+	})
+
+	t.Run("-infinity is read back as the sentinel", func(t *testing.T) {
+		var got Author
+		require.NoError(t, db.NewSelect().Model(&got).Where("name = ?", "always").Scan(ctx))
+		require.True(t, got.CreatedAt.Equal(boa.NegInfinity))
+	})
+
+	t.Run("a sentinel works as a query argument", func(t *testing.T) {
+		var names []string
+		err := db.NewSelect().Model((*Author)(nil)).
+			Column("name").
+			Where("created_at = ?", boa.PosInfinity).
+			Scan(ctx, &names)
+		require.NoError(t, err)
+		require.Equal(t, []string{"forever"}, names)
+	})
+}
+
 func TestIntegrationRelations(t *testing.T) {
 	db, _ := testDB(t)
 	ctx := context.Background()

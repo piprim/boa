@@ -17,7 +17,40 @@ const (
 	timestamptzFormat3 = "2006-01-02 15:04:05.999999999-07"
 )
 
+// PosInfinity and NegInfinity stand for PostgreSQL's 'infinity' and
+// '-infinity', which a time.Time cannot hold. PostgreSQL keeps microseconds,
+// so their nanoseconds cannot come from a stored value, and both years stay in
+// the range encoding/json accepts.
+var (
+	PosInfinity = time.Date(9999, time.December, 31, 23, 59, 59, 999999999, time.UTC)
+	NegInfinity = time.Date(0, time.January, 1, 0, 0, 0, 1, time.UTC)
+)
+
+const (
+	posInfinityText = "infinity"
+	negInfinityText = "-infinity"
+)
+
+// InfinityText returns the PostgreSQL spelling of tm when it is one of the
+// infinity sentinels.
+func InfinityText(tm time.Time) (string, bool) {
+	switch {
+	case tm.Equal(PosInfinity):
+		return posInfinityText, true
+	case tm.Equal(NegInfinity):
+		return negInfinityText, true
+	}
+	return "", false
+}
+
 func ParseTime(s string) (time.Time, error) {
+	switch s {
+	case posInfinityText:
+		return PosInfinity, nil
+	case negInfinityText:
+		return NegInfinity, nil
+	}
+
 	l := len(s)
 
 	if l >= len("2006-01-02 15:04:05") {

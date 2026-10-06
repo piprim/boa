@@ -3,6 +3,9 @@ package schema
 import (
 	"fmt"
 	"strconv"
+	"time"
+
+	"github.com/piprim/boa/internal"
 )
 
 // ArgList collects the values bound to $n placeholders while a query renders.
@@ -32,6 +35,14 @@ func (l *ArgList) Err() error {
 }
 
 func (l *ArgList) add(v any) int {
+	// PostgreSQL parses 'infinity' for any date or timestamp parameter.
+	// ponytail: a time inside a slice is bound as is; translate there too if
+	// arrays of dates ever need infinity.
+	if tm, ok := v.(time.Time); ok {
+		if text, ok := internal.InfinityText(tm); ok {
+			v = text
+		}
+	}
 	l.args = append(l.args, v)
 	return len(l.args)
 }

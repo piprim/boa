@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/piprim/boa/dialect"
+	"github.com/piprim/boa/internal"
 	"github.com/piprim/boa/schema"
 )
 
@@ -18,6 +19,9 @@ var (
 )
 
 func appendTime(buf []byte, tm time.Time) []byte {
+	if text, ok := internal.InfinityText(tm); ok {
+		return append(buf, text...)
+	}
 	return tm.UTC().AppendFormat(buf, "2006-01-02 15:04:05.999999-07:00")
 }
 

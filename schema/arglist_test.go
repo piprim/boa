@@ -3,8 +3,11 @@ package schema
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/piprim/boa/internal"
 )
 
 func TestArgList(t *testing.T) {
@@ -16,6 +19,16 @@ func TestArgList(t *testing.T) {
 		b = gen.Bind(b, "x")
 		require.Equal(t, "$1, $2", string(b))
 		require.Equal(t, []any{42, "x"}, list.Args())
+	})
+
+	t.Run("Bind sends the infinity sentinels as the text PostgreSQL parses", func(t *testing.T) {
+		list := NewArgList()
+		gen := NewQueryGen(NewTables(nil), false).WithArgList(list)
+		finite := time.Date(2026, time.April, 2, 0, 0, 0, 0, time.UTC)
+		gen.Bind(nil, internal.PosInfinity)
+		gen.Bind(nil, internal.NegInfinity)
+		gen.Bind(nil, finite)
+		require.Equal(t, []any{"infinity", "-infinity", finite}, list.Args())
 	})
 
 	t.Run("Args is an empty non-nil slice when nothing was bound", func(t *testing.T) {

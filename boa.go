@@ -35,6 +35,16 @@ type (
 	AfterScanRowHook = schema.AfterScanRowHook
 )
 
+// PosInfinity and NegInfinity are the times boa reads for PostgreSQL's
+// 'infinity' and '-infinity', and writes back as such. A time.Time cannot hold
+// an infinite value, so compare with Equal:
+//
+//	if mandat.DateStop.Equal(boa.PosInfinity) { ... } // no end date
+var (
+	PosInfinity = internal.PosInfinity
+	NegInfinity = internal.NegInfinity
+)
+
 const (
 	// OrderAsc sorts values in ascending order.
 	OrderAsc = schema.OrderAsc
