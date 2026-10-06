@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/internal/parser"
+	"github.com/piprim/boa/dialect"
+	"github.com/piprim/boa/internal/parser"
 )
 
 var nopQueryGen = QueryGen{tables: NewTables(nil), nop: true}

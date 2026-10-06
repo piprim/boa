@@ -3,8 +3,8 @@ package pgdialect
 import (
 	"strings"
 
-	"github.com/piprim/pgcrud/dialect/sqltype"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/dialect/sqltype"
+	"github.com/piprim/boa/schema"
 )
 
 // Dialect holds the Postgres table registry and the binding options.

@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/dialect"
+	"github.com/piprim/boa/schema"
 )
 
 var (
@@ -42,7 +42,7 @@ func hstoreAppender(typ reflect.Type) schema.AppenderFunc {
 	}
 
 	return func(gen schema.QueryGen, b []byte, v reflect.Value) []byte {
-		err := fmt.Errorf("pgcrud: Hstore(unsupported %s)", v.Type())
+		err := fmt.Errorf("boa: Hstore(unsupported %s)", v.Type())
 		return gen.BindError(b, err)
 	}
 }

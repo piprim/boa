@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 type structTableModel struct {
@@ -295,7 +295,7 @@ func (m *structTableModel) ScanColumn(column string, src any) error {
 	if column == "" || column[0] == '_' || m.db.flags.Has(discardUnknownColumns) {
 		return nil
 	}
-	return fmt.Errorf("pgcrud: %s does not have column %q", m.table.TypeName, column)
+	return fmt.Errorf("boa: %s does not have column %q", m.table.TypeName, column)
 }
 
 func (m *structTableModel) scanColumn(column string, src any) (bool, error) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
 type HStoreValue struct {
@@ -20,11 +20,11 @@ type HStoreValue struct {
 //
 // For struct fields you can use hstore tag:
 //
-//	Attrs  map[string]string `bun:",hstore"`
+//	Attrs  map[string]string `boa:",hstore"`
 func HStore(vi any) *HStoreValue {
 	v := reflect.ValueOf(vi)
 	if !v.IsValid() {
-		panic(fmt.Errorf("pgcrud: HStore(nil)"))
+		panic(fmt.Errorf("boa: HStore(nil)"))
 	}
 
 	typ := v.Type()
@@ -32,7 +32,7 @@ func HStore(vi any) *HStoreValue {
 		typ = typ.Elem()
 	}
 	if typ.Kind() != reflect.Map {
-		panic(fmt.Errorf("pgcrud: Hstore(unsupported %s)", typ))
+		panic(fmt.Errorf("boa: Hstore(unsupported %s)", typ))
 	}
 
 	return &HStoreValue{
@@ -50,17 +50,17 @@ var (
 
 func (h *HStoreValue) AppendQuery(gen schema.QueryGen, b []byte) ([]byte, error) {
 	if h.append == nil {
-		panic(fmt.Errorf("pgcrud: HStore(unsupported %s)", h.v.Type()))
+		panic(fmt.Errorf("boa: HStore(unsupported %s)", h.v.Type()))
 	}
 	return h.append(gen, b, h.v), nil
 }
 
 func (h *HStoreValue) Scan(src any) error {
 	if h.scan == nil {
-		return fmt.Errorf("pgcrud: HStore(unsupported %s)", h.v.Type())
+		return fmt.Errorf("boa: HStore(unsupported %s)", h.v.Type())
 	}
 	if h.v.Kind() != reflect.Pointer {
-		return fmt.Errorf("pgcrud: HStore(non-pointer %s)", h.v.Type())
+		return fmt.Errorf("boa: HStore(non-pointer %s)", h.v.Type())
 	}
 	return h.scan(h.v.Elem(), src)
 }

@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
 // InsertQuery builds SQL INSERT statements.
@@ -289,7 +289,7 @@ func (q *InsertQuery) appendColumnsValues(
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("pgcrud: Insert does not support %T", q.tableModel)
+		return nil, fmt.Errorf("boa: Insert does not support %T", q.tableModel)
 	}
 
 	b = append(b, ')')

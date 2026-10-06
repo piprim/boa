@@ -1,12 +1,12 @@
-package pgcrud
+package boa
 
 import (
 	"fmt"
 	"reflect"
 	"strconv"
 
-	"github.com/piprim/pgcrud/dialect/sqltype"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/dialect/sqltype"
+	"github.com/piprim/boa/schema"
 )
 
 // ValuesQuery builds VALUES clauses that can be used as subqueries.
@@ -114,7 +114,7 @@ func (q *ValuesQuery) AppendColumns(gen schema.QueryGen, b []byte) (_ []byte, er
 		return model.appendColumns(gen, b)
 	}
 
-	return nil, fmt.Errorf("pgcrud: Values does not support %T", q.model)
+	return nil, fmt.Errorf("boa: Values does not support %T", q.model)
 }
 
 func (q *ValuesQuery) Operation() string {
@@ -184,7 +184,7 @@ func (q *ValuesQuery) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		}
 
 	default:
-		return nil, fmt.Errorf("pgcrud: Values does not support %T", model)
+		return nil, fmt.Errorf("boa: Values does not support %T", model)
 	}
 
 	b = append(b, ')')
@@ -234,7 +234,7 @@ func (q *ValuesQuery) appendSet(gen schema.QueryGen, b []byte) (_ []byte, err er
 		}
 		return q.appendSetStruct(gen, b, model, fields)
 	default:
-		return nil, fmt.Errorf("pgcrud: SetValues(unsupported %T)", model)
+		return nil, fmt.Errorf("boa: SetValues(unsupported %T)", model)
 	}
 }
 

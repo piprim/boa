@@ -6,24 +6,24 @@ import (
 )
 
 type benchCountry struct {
-	ID   int64 `bun:",pk"`
+	ID   int64 `boa:",pk"`
 	Name string
 }
 
 type benchAuthor struct {
-	ID        int64 `bun:",pk"`
+	ID        int64 `boa:",pk"`
 	Name      string
 	Email     string
 	CountryID int64
-	Country   *benchCountry `bun:"rel:belongs-to,join:country_id=id"`
+	Country   *benchCountry `boa:"rel:belongs-to,join:country_id=id"`
 }
 
 type benchBook struct {
-	ID       int64 `bun:",pk"`
+	ID       int64 `boa:",pk"`
 	Title    string
 	Subtitle string
 	AuthorID int64
-	Author   *benchAuthor `bun:"rel:belongs-to,join:author_id=id"`
+	Author   *benchAuthor `boa:"rel:belongs-to,join:author_id=id"`
 }
 
 // LookupField is called once per column per scanned row. Names that address a

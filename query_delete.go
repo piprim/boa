@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 // DeleteQuery builds SQL DELETE statements.

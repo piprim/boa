@@ -1,12 +1,12 @@
-package pgcrud
+package boa
 
 import (
 	"context"
 	"fmt"
 	"reflect"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 type (
@@ -19,11 +19,11 @@ type (
 	// Order denotes sorting direction used in ORDER BY clauses.
 	Order = schema.Order
 
-	// NullTime is a nullable time value compatible with Bun.
+	// NullTime is a nullable time value compatible with Boa.
 	NullTime = schema.NullTime
 	// BaseModel provides default metadata embedded into user models.
 	BaseModel = schema.BaseModel
-	// Query is implemented by all Bun query builders.
+	// Query is implemented by all Boa query builders.
 	Query = schema.Query
 
 	// BeforeAppendModelHook is called before a model is appended to a query.
@@ -50,7 +50,7 @@ const (
 	OrderDescNullsLast = schema.OrderDescNullsLast
 )
 
-// SafeQuery wraps a raw query string and arguments and marks it safe for Bun.
+// SafeQuery wraps a raw query string and arguments and marks it safe for Boa.
 func SafeQuery(query string, args ...any) schema.QueryWithArgs {
 	return schema.SafeQuery(query, args)
 }
@@ -95,7 +95,7 @@ type AfterDeleteHook interface {
 	AfterDelete(ctx context.Context, query *DeleteQuery) error
 }
 
-// SetLogger overwrites default Bun logger.
+// SetLogger overwrites default Boa logger.
 func SetLogger(logger internal.Logging) {
 	internal.SetLogger(logger)
 }
@@ -125,7 +125,7 @@ func List(slice any) ListValues {
 func (in ListValues) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err error) {
 	v := reflect.ValueOf(in.slice)
 	if v.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("pgcrud: List(non-slice %T)", in.slice)
+		return nil, fmt.Errorf("boa: List(non-slice %T)", in.slice)
 	}
 
 	b = appendValues(gen, b, v)
@@ -178,7 +178,7 @@ func (in TupleValues) AppendQuery(gen schema.QueryGen, b []byte) (_ []byte, err 
 		return b, nil
 	}
 	if v.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("pgcrud: Tuple(non-slice %T)", in.slice)
+		return nil, fmt.Errorf("boa: Tuple(non-slice %T)", in.slice)
 	}
 
 	b = append(b, '(')

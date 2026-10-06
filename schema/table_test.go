@@ -12,7 +12,7 @@ func TestTable(t *testing.T) {
 
 	t.Run("simple", func(t *testing.T) {
 		type Model struct {
-			ID  int `bun:",pk"`
+			ID  int `boa:",pk"`
 			Foo string
 			Bar string
 		}
@@ -66,7 +66,7 @@ func TestTable(t *testing.T) {
 
 	t.Run("table name", func(t *testing.T) {
 		type Model struct {
-			BaseModel `bun:"custom_name,alias:custom_alias"`
+			BaseModel `boa:"custom_name,alias:custom_alias"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*Model]())
@@ -76,10 +76,10 @@ func TestTable(t *testing.T) {
 
 	t.Run("extend", func(t *testing.T) {
 		type Model1 struct {
-			BaseModel `bun:"custom_name,alias:custom_alias"`
+			BaseModel `boa:"custom_name,alias:custom_alias"`
 		}
 		type Model2 struct {
-			Model1 `bun:",extend"`
+			Model1 `boa:",extend"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*Model2]())
@@ -94,8 +94,8 @@ func TestTable(t *testing.T) {
 		}
 
 		type Role struct {
-			Foo Perms `bun:"embed:foo_"`
-			Bar Perms `bun:"embed:bar_"`
+			Foo Perms `boa:"embed:foo_"`
+			Bar Perms `boa:"embed:bar_"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*Role]())
@@ -118,7 +118,7 @@ func TestTable(t *testing.T) {
 		}
 		type Role struct {
 			Perms        // should be ignore
-			Foo    Perms `bun:"embed:foo_"`
+			Foo    Perms `boa:"embed:foo_"`
 			View   bool
 			Create bool
 		}
@@ -138,12 +138,12 @@ func TestTable(t *testing.T) {
 		type Perms struct {
 			View          bool
 			Create        bool
-			UniqueID      int `bun:",unique"`
-			UniqueGroupID int `bun:",unique:groupa"`
+			UniqueID      int `boa:",unique"`
+			UniqueGroupID int `boa:",unique:groupa"`
 		}
 
 		type Role struct {
-			Foo Perms `bun:"embed:foo_"`
+			Foo Perms `boa:"embed:foo_"`
 			Perms
 		}
 
@@ -171,16 +171,16 @@ func TestTable(t *testing.T) {
 
 	t.Run("embedWithRelation", func(t *testing.T) {
 		type Profile struct {
-			ID     string `bun:",pk"`
+			ID     string `boa:",pk"`
 			UserID string
 		}
 		type User struct {
-			ID      string   `bun:",pk"`
-			Profile *Profile `bun:"rel:has-one,join:id=user_id"`
+			ID      string   `boa:",pk"`
+			Profile *Profile `boa:"rel:has-one,join:id=user_id"`
 		}
 		type Embeded struct {
 			User
-			Extra string `bun:"-"`
+			Extra string `boa:"-"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*Embeded]())
@@ -191,7 +191,7 @@ func TestTable(t *testing.T) {
 	t.Run("embed scanonly", func(t *testing.T) {
 		type Model1 struct {
 			Foo string
-			Bar string `bun:",scanonly"`
+			Bar string `boa:",scanonly"`
 		}
 
 		type Model2 struct {
@@ -212,12 +212,12 @@ func TestTable(t *testing.T) {
 
 	t.Run("embed scanonly prefix", func(t *testing.T) {
 		type Model1 struct {
-			Foo string `bun:",scanonly"`
-			Bar string `bun:",scanonly"`
+			Foo string `boa:",scanonly"`
+			Bar string `boa:",scanonly"`
 		}
 
 		type Model2 struct {
-			Baz Model1 `bun:"embed:baz_"`
+			Baz Model1 `boa:"embed:baz_"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*Model2]())
@@ -239,8 +239,8 @@ func TestTable(t *testing.T) {
 		}
 
 		type Model2 struct {
-			XXX Model1 `bun:",scanonly"`
-			Baz string `bun:",scanonly"`
+			XXX Model1 `boa:",scanonly"`
+			Baz string `boa:",scanonly"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*Model2]())
@@ -283,9 +283,9 @@ func TestTable(t *testing.T) {
 
 	t.Run("recursive relation", func(t *testing.T) {
 		type Item struct {
-			ID     int64 `bun:",pk"`
+			ID     int64 `boa:",pk"`
 			ItemID int64
-			Item   *Item `bun:"rel:belongs-to,join:item_id=id"`
+			Item   *Item `boa:"rel:belongs-to,join:item_id=id"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*Item]())
@@ -306,7 +306,7 @@ func TestTable(t *testing.T) {
 	t.Run("alternative name", func(t *testing.T) {
 		type ModelTest struct {
 			Model
-			Foo string `bun:"alt:alt_name"`
+			Foo string `boa:"alt:alt_name"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*ModelTest]())
@@ -324,7 +324,7 @@ func TestTable(t *testing.T) {
 
 	t.Run("autoincrement is not nullable", func(t *testing.T) {
 		type Thing struct {
-			Counter int `bun:",autoincrement"`
+			Counter int `boa:",autoincrement"`
 		}
 
 		table := tables.Get(reflect.TypeFor[*Thing]())
@@ -337,30 +337,30 @@ func TestTable(t *testing.T) {
 
 	t.Run("m2m on embedded base", func(t *testing.T) {
 		type Item struct {
-			ID int64 `bun:",pk"`
+			ID int64 `boa:",pk"`
 		}
 
 		type Order struct {
-			BaseModel `bun:"orders"`
+			BaseModel `boa:"orders"`
 
-			ID    int64  `bun:",pk"`
-			Items []Item `bun:"m2m:order_to_items,join:Order=Item"`
+			ID    int64  `boa:",pk"`
+			Items []Item `boa:"m2m:order_to_items,join:Order=Item"`
 		}
 
 		type OrderToItem struct {
-			BaseModel `bun:"order_to_items"`
+			BaseModel `boa:"order_to_items"`
 
-			OrderID int64  `bun:",pk"`
-			Order   *Order `bun:"rel:belongs-to,join:order_id=id"`
-			ItemID  int64  `bun:",pk"`
-			Item    *Item  `bun:"rel:belongs-to,join:item_id=id"`
+			OrderID int64  `boa:",pk"`
+			Order   *Order `boa:"rel:belongs-to,join:order_id=id"`
+			ItemID  int64  `boa:",pk"`
+			Item    *Item  `boa:"rel:belongs-to,join:item_id=id"`
 		}
 
 		type OrderWrap struct {
-			BaseModel `bun:"orders,alias:orders"`
+			BaseModel `boa:"orders,alias:orders"`
 			*Order
 
-			Extra bool `bun:"extra"`
+			Extra bool `boa:"extra"`
 		}
 
 		tables := NewTables(nil)
@@ -381,35 +381,35 @@ func TestTable(t *testing.T) {
 
 	t.Run("m2m validates base join pks", func(t *testing.T) {
 		type Item struct {
-			ID int64 `bun:",pk"`
+			ID int64 `boa:",pk"`
 		}
 
 		type Order struct {
-			BaseModel `bun:"orders"`
+			BaseModel `boa:"orders"`
 
-			ID int64 `bun:",pk"`
+			ID int64 `boa:",pk"`
 		}
 
 		type OrderToItem struct {
-			BaseModel `bun:"order_to_items"`
+			BaseModel `boa:"order_to_items"`
 
-			OrderID int64  `bun:",pk"`
-			Order   *Order `bun:"rel:belongs-to,join:order_id=id"`
-			ItemID  int64  `bun:",pk"`
-			Item    *Item  `bun:"rel:belongs-to,join:item_id=id"`
+			OrderID int64  `boa:",pk"`
+			Order   *Order `boa:"rel:belongs-to,join:order_id=id"`
+			ItemID  int64  `boa:",pk"`
+			Item    *Item  `boa:"rel:belongs-to,join:item_id=id"`
 		}
 
 		type OrderWrap struct {
-			BaseModel `bun:"orders,alias:orders"`
+			BaseModel `boa:"orders,alias:orders"`
 
-			OtherID int64  `bun:"other_id,pk"`
-			Items   []Item `bun:"m2m:order_to_items,join:Order=Item"`
+			OtherID int64  `boa:"other_id,pk"`
+			Items   []Item `boa:"m2m:order_to_items,join:Order=Item"`
 		}
 
 		tables := NewTables(nil)
 		tables.Register((*OrderToItem)(nil))
 
-		require.PanicsWithError(t, "pgcrud: OrderToItem belongs-to Order: OrderWrap must have column id", func() {
+		require.PanicsWithError(t, "boa: OrderToItem belongs-to Order: OrderWrap must have column id", func() {
 			tables.Get(reflect.TypeOf((*OrderWrap)(nil)).Elem())
 		})
 	})

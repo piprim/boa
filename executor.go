@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// DBExecutor is the subset of pgx that pgcrud needs to run a query.
+// DBExecutor is the subset of pgx that boa needs to run a query.
 // *pgxpool.Pool and pgx.Tx satisfy it structurally.
 type DBExecutor interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
@@ -31,11 +31,11 @@ var (
 type ExecutorResolver func(ctx context.Context) DBExecutor
 
 // ErrNilExecutor is returned when the resolver produced no executor.
-var ErrNilExecutor = errors.New("pgcrud: executor resolver returned nil")
+var ErrNilExecutor = errors.New("boa: executor resolver returned nil")
 
 // ErrTxRequired is returned by writes when WithTxRequiredForWrites is set and
 // the resolved executor is not a pgx.Tx.
-var ErrTxRequired = errors.New("pgcrud: write outside a transaction")
+var ErrTxRequired = errors.New("boa: write outside a transaction")
 
 // isTx reports whether exec is a pgx transaction.
 func isTx(exec DBExecutor) bool {

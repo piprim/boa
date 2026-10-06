@@ -1,4 +1,4 @@
-package pgcrud_test
+package boa_test
 
 import (
 	"context"
@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/piprim/pgcrud"
-	"github.com/piprim/pgcrud/dialect/pgdialect"
+	"github.com/piprim/boa"
+	"github.com/piprim/boa/dialect/pgdialect"
 )
 
 const schemaSQL = `
@@ -72,10 +72,10 @@ CREATE TABLE story_tags (
 `
 
 type Author struct {
-	ID        int64 `bun:",pk,autoincrement"`
+	ID        int64 `boa:",pk,autoincrement"`
 	Name      string
-	Emails    []string       `bun:",array,nullzero"`
-	Meta      map[string]any `bun:",type:jsonb"`
+	Emails    []string       `boa:",array,nullzero"`
+	Meta      map[string]any `boa:",type:jsonb"`
 	Avatar    []byte
 	Balance   float64
 	Active    bool
@@ -83,34 +83,34 @@ type Author struct {
 }
 
 type Story struct {
-	ID       int64 `bun:",pk,autoincrement"`
+	ID       int64 `boa:",pk,autoincrement"`
 	Title    string
 	AuthorID int64
-	Author   *Author    `bun:"rel:belongs-to,join:author_id=id"`
-	Comments []*Comment `bun:"rel:has-many,join:id=story_id"`
-	Tags     []Tag      `bun:"m2m:story_tags,join:Story=Tag"`
+	Author   *Author    `boa:"rel:belongs-to,join:author_id=id"`
+	Comments []*Comment `boa:"rel:has-many,join:id=story_id"`
+	Tags     []Tag      `boa:"m2m:story_tags,join:Story=Tag"`
 }
 
 type Comment struct {
-	ID      int64 `bun:",pk,autoincrement"`
+	ID      int64 `boa:",pk,autoincrement"`
 	StoryID int64
 	Body    string
 }
 
 type Tag struct {
-	ID   int64 `bun:",pk,autoincrement"`
+	ID   int64 `boa:",pk,autoincrement"`
 	Name string
 }
 
 // Kitchen holds one column of every value type the bind mapping covers.
 type Kitchen struct {
-	pgcrud.BaseModel `bun:"table:kitchen"`
+	boa.BaseModel `boa:"table:kitchen"`
 
-	ID       int64             `bun:",pk,autoincrement"`
-	Tags     []string          `bun:",array"`
-	Nums     []int64           `bun:",array"`
-	Doc      map[string]any    `bun:",type:jsonb"`
-	Attrs    map[string]string `bun:",hstore"`
+	ID       int64             `boa:",pk,autoincrement"`
+	Tags     []string          `boa:",array"`
+	Nums     []int64           `boa:",array"`
+	Doc      map[string]any    `boa:",type:jsonb"`
+	Attrs    map[string]string `boa:",hstore"`
 	Span     pgdialect.Range[int64]
 	Period   pgdialect.Range[time.Time]
 	Addr     net.IP
@@ -118,25 +118,25 @@ type Kitchen struct {
 	Label    string
 	Rank     int32
 	Ratio    float64
-	OK       bool `bun:"ok"`
+	OK       bool `boa:"ok"`
 	At       time.Time
 	Nullable sql.NullString
 }
 
 type StoryTag struct {
-	StoryID int64  `bun:",pk"`
-	Story   *Story `bun:"rel:belongs-to,join:story_id=id"`
-	TagID   int64  `bun:",pk"`
-	Tag     *Tag   `bun:"rel:belongs-to,join:tag_id=id"`
+	StoryID int64  `boa:",pk"`
+	Story   *Story `boa:"rel:belongs-to,join:story_id=id"`
+	TagID   int64  `boa:",pk"`
+	Tag     *Tag   `boa:"rel:belongs-to,join:tag_id=id"`
 }
 
-// testDB connects to PGCRUD_TEST_DSN, recreates the schema and returns a DB
+// testDB connects to BOA_TEST_DSN, recreates the schema and returns a DB
 // wired to a UnitOfWork. It skips the test when the variable is unset.
-func testDB(t *testing.T) (*pgcrud.DB, *UnitOfWork) {
+func testDB(t *testing.T) (*boa.DB, *UnitOfWork) {
 	t.Helper()
-	dsn := os.Getenv("PGCRUD_TEST_DSN")
+	dsn := os.Getenv("BOA_TEST_DSN")
 	if dsn == "" {
-		t.Skip("PGCRUD_TEST_DSN not set")
+		t.Skip("BOA_TEST_DSN not set")
 	}
 	ctx := context.Background()
 
@@ -145,7 +145,7 @@ func testDB(t *testing.T) (*pgcrud.DB, *UnitOfWork) {
 	t.Cleanup(pool.Close)
 
 	uow := NewUnitOfWork(pool)
-	db := pgcrud.New(pool, pgcrud.WithExecutorResolver(uow.Executor))
+	db := boa.New(pool, boa.WithExecutorResolver(uow.Executor))
 	db.RegisterModel((*StoryTag)(nil))
 
 	_, err = db.NewRaw(schemaSQL).Exec(ctx)
@@ -270,7 +270,7 @@ func TestIntegrationRelations(t *testing.T) {
 	var got Story
 	err = db.NewSelect().Model(&got).
 		Relation("Author").
-		Relation("Comments", func(q *pgcrud.SelectQuery) *pgcrud.SelectQuery { return q.OrderExpr("id") }).
+		Relation("Comments", func(q *boa.SelectQuery) *boa.SelectQuery { return q.OrderExpr("id") }).
 		Relation("Tags").
 		Where("story.id = ?", story.ID).
 		Scan(ctx)
@@ -301,11 +301,11 @@ func TestIntegrationRelations(t *testing.T) {
 	})
 }
 
-var _ pgcrud.BeforeAppendModelHook = (*Author)(nil)
+var _ boa.BeforeAppendModelHook = (*Author)(nil)
 
 // BeforeAppendModel fills CreatedAt on insert when the caller left it zero.
-func (a *Author) BeforeAppendModel(ctx context.Context, query pgcrud.Query) error {
-	if _, ok := query.(*pgcrud.InsertQuery); ok && a.CreatedAt.IsZero() {
+func (a *Author) BeforeAppendModel(ctx context.Context, query boa.Query) error {
+	if _, ok := query.(*boa.InsertQuery); ok && a.CreatedAt.IsZero() {
 		a.CreatedAt = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
 	return nil
@@ -415,11 +415,11 @@ func TestIntegrationUnitOfWork(t *testing.T) {
 	})
 
 	t.Run("write outside a transaction fails when required", func(t *testing.T) {
-		strict := pgcrud.New(db.Pool(),
-			pgcrud.WithExecutorResolver(uow.Executor),
-			pgcrud.WithTxRequiredForWrites())
+		strict := boa.New(db.Pool(),
+			boa.WithExecutorResolver(uow.Executor),
+			boa.WithTxRequiredForWrites())
 		_, err := strict.NewInsert().Model(&Tag{Name: "escaped"}).Exec(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrTxRequired)
+		require.ErrorIs(t, err, boa.ErrTxRequired)
 		n, err := strict.NewSelect().Model((*Tag)(nil)).Where("name = ?", "escaped").Count(ctx)
 		require.NoError(t, err)
 		require.Zero(t, n)

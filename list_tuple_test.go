@@ -1,11 +1,11 @@
-package pgcrud
+package boa
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
 func TestListAndTuple(t *testing.T) {

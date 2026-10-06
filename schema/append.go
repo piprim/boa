@@ -3,7 +3,7 @@ package schema
 import (
 	"reflect"
 
-	"github.com/piprim/pgcrud/dialect"
+	"github.com/piprim/boa/dialect"
 )
 
 func NullZero(value any) QueryAppender {

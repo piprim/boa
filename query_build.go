@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 // maxParams is the number of bind parameters Postgres accepts in one statement.
@@ -16,7 +16,7 @@ const maxParams = 65535
 
 // ErrTooManyParams is returned when a statement binds more than 65535 values.
 // Chunk the rows, or use pgx.CopyFrom for bulk loads.
-var ErrTooManyParams = errors.New("pgcrud: too many bound parameters")
+var ErrTooManyParams = errors.New("boa: too many bound parameters")
 
 // build renders app into SQL with $n placeholders and returns the values bound
 // to them, in order. It fails before anything is sent when a value cannot be
@@ -32,7 +32,7 @@ func (db *DB) build(app schema.QueryAppender) (string, []any, error) {
 	}
 	args := list.Args()
 	if len(args) > maxParams {
-		return "", nil, fmt.Errorf("pgcrud: query binds %d parameters, Postgres allows at most %d: %w",
+		return "", nil, fmt.Errorf("boa: query binds %d parameters, Postgres allows at most %d: %w",
 			len(args), maxParams, ErrTooManyParams)
 	}
 	return internal.String(b), args, nil

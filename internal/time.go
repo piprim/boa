@@ -51,7 +51,7 @@ func ParseTime(s string) (time.Time, error) {
 	}
 
 	if l < len("15:04:05") {
-		return time.Time{}, fmt.Errorf("pgcrud: can't parse time=%q", s)
+		return time.Time{}, fmt.Errorf("boa: can't parse time=%q", s)
 	}
 
 	if s[2] == ':' {

@@ -1,4 +1,4 @@
-package pgcrud_test
+package boa_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/piprim/pgcrud"
+	"github.com/piprim/boa"
 )
 
 type txKey struct{}
@@ -22,7 +22,7 @@ func NewUnitOfWork(pool *pgxpool.Pool) *UnitOfWork {
 	return &UnitOfWork{pool: pool}
 }
 
-func (u *UnitOfWork) Executor(ctx context.Context) pgcrud.DBExecutor {
+func (u *UnitOfWork) Executor(ctx context.Context) boa.DBExecutor {
 	if tx, ok := ctx.Value(txKey{}).(pgx.Tx); ok {
 		return tx
 	}

@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/piprim/pgcrud/dialect/sqltype"
-	"github.com/piprim/pgcrud/internal"
+	"github.com/piprim/boa/dialect/sqltype"
+	"github.com/piprim/boa/internal"
 )
 
 var scannerType = reflect.TypeFor[sql.Scanner]()
@@ -331,7 +331,7 @@ func scanJSON(dest reflect.Value, src any) error {
 		return scanNull(dest)
 	}
 	if !dest.CanAddr() {
-		return fmt.Errorf("pgcrud: Scan(nonaddressable %s)", dest.Type())
+		return fmt.Errorf("boa: Scan(nonaddressable %s)", dest.Type())
 	}
 
 	b, err := toBytes(src)
@@ -347,7 +347,7 @@ func scanJSONUseNumber(dest reflect.Value, src any) error {
 		return scanNull(dest)
 	}
 	if !dest.CanAddr() {
-		return fmt.Errorf("pgcrud: Scan(nonaddressable %s)", dest.Type())
+		return fmt.Errorf("boa: Scan(nonaddressable %s)", dest.Type())
 	}
 
 	b, err := toBytes(src)
@@ -372,7 +372,7 @@ func scanIP(dest reflect.Value, src any) error {
 
 	ip := net.ParseIP(internal.String(b))
 	if ip == nil {
-		return fmt.Errorf("pgcrud: invalid ip: %q", b)
+		return fmt.Errorf("boa: invalid ip: %q", b)
 	}
 
 	ptr := dest.Addr().Interface().(*net.IP)
@@ -414,7 +414,7 @@ func scanNetIpAddr(dest reflect.Value, src any) error {
 
 	val, _ := netip.ParseAddr(internal.String(b))
 	if !val.IsValid() {
-		return fmt.Errorf("pgcrud: invalid ip: %q", b)
+		return fmt.Errorf("boa: invalid ip: %q", b)
 	}
 
 	ptr := dest.Addr().Interface().(*netip.Addr)
@@ -435,7 +435,7 @@ func scanNetIpPrefix(dest reflect.Value, src any) error {
 
 	val, _ := netip.ParsePrefix(internal.String(b))
 	if !val.IsValid() {
-		return fmt.Errorf("pgcrud: invalid prefix: %q", b)
+		return fmt.Errorf("boa: invalid prefix: %q", b)
 	}
 
 	ptr := dest.Addr().Interface().(*netip.Prefix)
@@ -447,7 +447,7 @@ func scanNetIpPrefix(dest reflect.Value, src any) error {
 func addrScanner(fn ScannerFunc) ScannerFunc {
 	return func(dest reflect.Value, src any) error {
 		if !dest.CanAddr() {
-			return fmt.Errorf("pgcrud: Scan(nonaddressable %T)", dest.Interface())
+			return fmt.Errorf("boa: Scan(nonaddressable %T)", dest.Interface())
 		}
 		return fn(dest.Addr(), src)
 	}
@@ -460,7 +460,7 @@ func toBytes(src any) ([]byte, error) {
 	case []byte:
 		return src, nil
 	default:
-		return nil, fmt.Errorf("pgcrud: got %T, wanted []byte or string", src)
+		return nil, fmt.Errorf("boa: got %T, wanted []byte or string", src)
 	}
 }
 
@@ -497,7 +497,7 @@ func scanNull(dest reflect.Value) error {
 		return nil
 	}
 	if !dest.CanAddr() {
-		return fmt.Errorf("pgcrud: Scan(nonaddressable %s)", dest.Type())
+		return fmt.Errorf("boa: Scan(nonaddressable %s)", dest.Type())
 	}
 	dest.Set(reflect.New(dest.Type()).Elem())
 	return nil
@@ -549,5 +549,5 @@ func nilable(kind reflect.Kind) bool {
 }
 
 func scanError(dest reflect.Type, src any) error {
-	return fmt.Errorf("pgcrud: can't scan %#v (%T) into %s", src, src, dest.String())
+	return fmt.Errorf("boa: can't scan %#v (%T) into %s", src, src, dest.String())
 }

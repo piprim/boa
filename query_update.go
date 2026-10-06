@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 // UpdateQuery builds SQL UPDATE statements.
@@ -147,7 +147,7 @@ func (q *UpdateQuery) JoinOnOr(cond string, args ...any) *UpdateQuery {
 
 func (q *UpdateQuery) joinOn(cond string, args []any, sep string) *UpdateQuery {
 	if len(q.joins) == 0 {
-		q.setErr(errors.New("pgcrud: query has no joins"))
+		q.setErr(errors.New("boa: query has no joins"))
 		return q
 	}
 	j := &q.joins[len(q.joins)-1]
@@ -299,7 +299,7 @@ func (q *UpdateQuery) mustAppendSet(gen schema.QueryGen, b []byte) (_ []byte, er
 		if len(q.set) > 0 { // bulk-update
 			return q.appendSet(gen, b)
 		}
-		return nil, errors.New("pgcrud: to bulk Update, use CTE and VALUES")
+		return nil, errors.New("boa: to bulk Update, use CTE and VALUES")
 
 	case *mapModel:
 		b = model.appendSet(gen, b)
@@ -308,7 +308,7 @@ func (q *UpdateQuery) mustAppendSet(gen schema.QueryGen, b []byte) (_ []byte, er
 		// continue below
 
 	default:
-		return nil, fmt.Errorf("pgcrud: Update does not support %T", q.model)
+		return nil, fmt.Errorf("boa: Update does not support %T", q.model)
 	}
 
 	if len(q.set) > 0 {
@@ -319,7 +319,7 @@ func (q *UpdateQuery) mustAppendSet(gen schema.QueryGen, b []byte) (_ []byte, er
 	}
 
 	if len(b) == pos {
-		return nil, errors.New("pgcrud: empty SET clause is not allowed in the UPDATE query")
+		return nil, errors.New("boa: empty SET clause is not allowed in the UPDATE query")
 	}
 	return b, nil
 }
@@ -344,7 +344,7 @@ func (q *UpdateQuery) appendOtherTables(gen schema.QueryGen, b []byte) (_ []byte
 func (q *UpdateQuery) Bulk() *UpdateQuery {
 	model, ok := q.model.(*sliceTableModel)
 	if !ok {
-		q.setErr(fmt.Errorf("pgcrud: Bulk requires a slice, got %T", q.model))
+		q.setErr(fmt.Errorf("boa: Bulk requires a slice, got %T", q.model))
 		return q
 	}
 

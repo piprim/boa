@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 const (
@@ -160,13 +160,13 @@ func (q *baseQuery) beforeAppendModel(ctx context.Context, query Query) error {
 
 func (q *baseQuery) checkSoftDelete() error {
 	if q.table == nil {
-		return errors.New("pgcrud: can't use soft deletes without a table")
+		return errors.New("boa: can't use soft deletes without a table")
 	}
 	if q.table.SoftDeleteField == nil {
 		return fmt.Errorf("%s does not have a soft delete field", q.table)
 	}
 	if q.tableModel == nil {
-		return errors.New("pgcrud: can't use soft deletes without a table model")
+		return errors.New("boa: can't use soft deletes without a table model")
 	}
 	return nil
 }
@@ -319,7 +319,7 @@ func (q *baseQuery) excludeColumn(columns []string) {
 
 	for _, column := range columns {
 		if !q._excludeColumn(column) {
-			q.setErr(fmt.Errorf("pgcrud: can't find column=%q", column))
+			q.setErr(fmt.Errorf("boa: can't find column=%q", column))
 			return
 		}
 	}
@@ -423,7 +423,7 @@ func (q *baseQuery) _appendFirstTable(
 		return q.tables[0].AppendQuery(gen, b)
 	}
 
-	return nil, errors.New("pgcrud: query does not have a table")
+	return nil, errors.New("boa: query does not have a table")
 }
 
 func (q *baseQuery) hasMultiTables() bool {
@@ -693,12 +693,12 @@ func (q *whereBaseQuery) addWhereGroup(sep string, where []schema.QueryWithSep) 
 
 func (q *whereBaseQuery) addWhereCols(cols []string) {
 	if q.table == nil {
-		err := fmt.Errorf("pgcrud: got %T, but WherePK requires a struct or slice-based model", q.model)
+		err := fmt.Errorf("boa: got %T, but WherePK requires a struct or slice-based model", q.model)
 		q.setErr(err)
 		return
 	}
 	if q.whereFields != nil {
-		err := errors.New("pgcrud: WherePK can only be called once")
+		err := errors.New("boa: WherePK can only be called once")
 		q.setErr(err)
 		return
 	}
@@ -727,7 +727,7 @@ func (q *whereBaseQuery) mustAppendWhere(
 	gen schema.QueryGen, b []byte, withAlias bool,
 ) ([]byte, error) {
 	if len(q.where) == 0 && q.whereFields == nil && !q.flags.Has(deletedFlag) {
-		err := errors.New("pgcrud: Update and Delete queries require at least one Where")
+		err := errors.New("boa: Update and Delete queries require at least one Where")
 		return nil, err
 	}
 	return q.appendWhere(gen, b, withAlias)
@@ -828,7 +828,7 @@ func (q *whereBaseQuery) appendWhereFields(
 	gen schema.QueryGen, b []byte, fields []*schema.Field, withAlias bool,
 ) (_ []byte, err error) {
 	if q.table == nil {
-		err := fmt.Errorf("pgcrud: got %T, but WherePK requires struct or slice-based model", q.model)
+		err := fmt.Errorf("boa: got %T, but WherePK requires struct or slice-based model", q.model)
 		return nil, err
 	}
 
@@ -838,7 +838,7 @@ func (q *whereBaseQuery) appendWhereFields(
 	case *sliceTableModel:
 		return q.appendWhereSliceFields(gen, b, model, fields, withAlias)
 	default:
-		return nil, fmt.Errorf("pgcrud: WhereColumn does not support %T", q.tableModel)
+		return nil, fmt.Errorf("boa: WhereColumn does not support %T", q.tableModel)
 	}
 }
 

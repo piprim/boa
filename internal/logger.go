@@ -17,7 +17,7 @@ var Logger Logging = &logger{
 }
 
 var Warn = &wrapper{
-	prefix: "WARN: pgcrud: ",
+	prefix: "WARN: boa: ",
 	logger: Logger,
 }
 

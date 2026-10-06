@@ -1,4 +1,4 @@
-module github.com/piprim/pgcrud
+module github.com/piprim/boa
 
 go 1.25.0
 

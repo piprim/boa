@@ -7,13 +7,13 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/dialect/sqltype"
-	"github.com/piprim/pgcrud/internal"
+	"github.com/piprim/boa/dialect"
+	"github.com/piprim/boa/dialect/sqltype"
+	"github.com/piprim/boa/internal"
 )
 
 var (
-	bunNullTimeType = reflect.TypeFor[NullTime]()
+	boaNullTimeType = reflect.TypeFor[NullTime]()
 	nullTimeType    = reflect.TypeFor[sql.NullTime]()
 	nullBoolType    = reflect.TypeFor[sql.NullBool]()
 	nullFloatType   = reflect.TypeFor[sql.NullFloat64]()
@@ -49,7 +49,7 @@ var sqlTypes = []string{
 
 func DiscoverSQLType(typ reflect.Type) string {
 	switch typ {
-	case timeType, nullTimeType, bunNullTimeType:
+	case timeType, nullTimeType, boaNullTimeType:
 		return sqltype.Timestamp
 	case nullBoolType:
 		return sqltype.Boolean
@@ -136,6 +136,6 @@ func (tm *NullTime) Scan(src any) error {
 		tm.Time = newtm
 		return nil
 	default:
-		return scanError(bunNullTimeType, src)
+		return scanError(boaNullTimeType, src)
 	}
 }

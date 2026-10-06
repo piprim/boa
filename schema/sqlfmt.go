@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/piprim/pgcrud/internal"
+	"github.com/piprim/boa/internal"
 )
 
 // QueryAppender is implemented by types that can append themselves to a SQL query.

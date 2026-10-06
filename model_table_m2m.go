@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 type m2mModel struct {
@@ -114,7 +114,7 @@ func (m *m2mModel) parkStruct() error {
 	baseValues, ok := m.baseValues[internal.NewMapKey(m.structKey)]
 	if !ok {
 		return fmt.Errorf(
-			"pgcrud: m2m relation=%s does not have base %s with key=%q (check join conditions)",
+			"boa: m2m relation=%s does not have base %s with key=%q (check join conditions)",
 			m.rel.Field.GoName, m.baseTable, m.structKey)
 	}
 

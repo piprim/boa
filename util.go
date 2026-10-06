@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"

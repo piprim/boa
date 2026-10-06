@@ -218,7 +218,7 @@ func TestAppendBindsComposites(t *testing.T) {
 		b := gen.Append(nil, map[string]any{"f": func() {}})
 		require.Contains(t, string(b), "?!(")
 		require.Error(t, list.Err())
-		require.Contains(t, list.Err().Error(), "pgcrud: bind arg 1:")
+		require.Contains(t, list.Err().Error(), "boa: bind arg 1:")
 	})
 
 	t.Run("NullTime zero is NULL and set binds the time", func(t *testing.T) {
@@ -235,11 +235,11 @@ func TestAppendBindsComposites(t *testing.T) {
 
 func TestFieldAppendValue(t *testing.T) {
 	type Model struct {
-		ID   int64  `bun:",pk"`
-		Name string `bun:",nullzero"`
+		ID   int64  `boa:",pk"`
+		Name string `boa:",nullzero"`
 		Note *string
-		Meta map[string]int `bun:",type:jsonb"`
-		Tags []string       `bun:",array"`
+		Meta map[string]int `boa:",type:jsonb"`
+		Tags []string       `boa:",array"`
 	}
 	tables := NewTables(nil)
 	table := tables.Get(reflect.TypeFor[*Model]())

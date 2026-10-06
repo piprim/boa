@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/dialect"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 type ArrayValue struct {
@@ -23,11 +23,11 @@ type ArrayValue struct {
 //
 // For struct fields you can use array tag:
 //
-//	Emails  []string `bun:",array"`
+//	Emails  []string `boa:",array"`
 func Array(vi any) *ArrayValue {
 	v := reflect.ValueOf(vi)
 	if !v.IsValid() {
-		panic(fmt.Errorf("pgcrud: Array(nil)"))
+		panic(fmt.Errorf("boa: Array(nil)"))
 	}
 
 	return &ArrayValue{
@@ -45,17 +45,17 @@ var (
 
 func (a *ArrayValue) AppendQuery(gen schema.QueryGen, b []byte) ([]byte, error) {
 	if a.append == nil {
-		panic(fmt.Errorf("pgcrud: Array(unsupported %s)", a.v.Type()))
+		panic(fmt.Errorf("boa: Array(unsupported %s)", a.v.Type()))
 	}
 	return a.append(gen, b, a.v), nil
 }
 
 func (a *ArrayValue) Scan(src any) error {
 	if a.scan == nil {
-		return fmt.Errorf("pgcrud: Array(unsupported %s)", a.v.Type())
+		return fmt.Errorf("boa: Array(unsupported %s)", a.v.Type())
 	}
 	if a.v.Kind() != reflect.Pointer {
-		return fmt.Errorf("pgcrud: Array(non-pointer %s)", a.v.Type())
+		return fmt.Errorf("boa: Array(non-pointer %s)", a.v.Type())
 	}
 	return a.scan(a.v, src)
 }
@@ -127,7 +127,7 @@ func arrayScanner(typ reflect.Type) schema.ScannerFunc {
 	return func(dest reflect.Value, src any) error {
 		dest = reflect.Indirect(dest)
 		if !dest.CanSet() {
-			return fmt.Errorf("pgcrud: Scan(non-settable %s)", dest.Type())
+			return fmt.Errorf("boa: Scan(non-settable %s)", dest.Type())
 		}
 
 		kind := dest.Kind()
@@ -172,7 +172,7 @@ func arrayScanner(typ reflect.Type) schema.ScannerFunc {
 func scanStringSliceValue(dest reflect.Value, src any) error {
 	dest = reflect.Indirect(dest)
 	if !dest.CanSet() {
-		return fmt.Errorf("pgcrud: Scan(non-settable %s)", dest.Type())
+		return fmt.Errorf("boa: Scan(non-settable %s)", dest.Type())
 	}
 
 	slice, err := decodeStringSlice(src)
@@ -210,7 +210,7 @@ func decodeStringSlice(src any) ([]string, error) {
 func scanIntSliceValue(dest reflect.Value, src any) error {
 	dest = reflect.Indirect(dest)
 	if !dest.CanSet() {
-		return fmt.Errorf("pgcrud: Scan(non-settable %s)", dest.Type())
+		return fmt.Errorf("boa: Scan(non-settable %s)", dest.Type())
 	}
 
 	slice, err := decodeIntSlice(src)
@@ -259,7 +259,7 @@ func decodeIntSlice(src any) ([]int, error) {
 func scanInt64SliceValue(dest reflect.Value, src any) error {
 	dest = reflect.Indirect(dest)
 	if !dest.CanSet() {
-		return fmt.Errorf("pgcrud: Scan(non-settable %s)", dest.Type())
+		return fmt.Errorf("boa: Scan(non-settable %s)", dest.Type())
 	}
 
 	slice, err := decodeInt64Slice(src)
@@ -308,7 +308,7 @@ func decodeInt64Slice(src any) ([]int64, error) {
 func scanFloat64SliceValue(dest reflect.Value, src any) error {
 	dest = reflect.Indirect(dest)
 	if !dest.CanSet() {
-		return fmt.Errorf("pgcrud: Scan(non-settable %s)", dest.Type())
+		return fmt.Errorf("boa: Scan(non-settable %s)", dest.Type())
 	}
 
 	slice, err := scanFloat64Slice(src)

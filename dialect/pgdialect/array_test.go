@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
 func ptr[T any](v T) *T {
@@ -64,8 +64,8 @@ func TestArrayAppend(t *testing.T) {
 
 	t.Run("array-tagged field binds the slice", func(t *testing.T) {
 		type Model struct {
-			ID   int64    `bun:",pk"`
-			Tags []string `bun:",array"`
+			ID   int64    `boa:",pk"`
+			Tags []string `boa:",array"`
 		}
 		d := New()
 		table := d.Tables().Get(reflect.TypeFor[*Model]())

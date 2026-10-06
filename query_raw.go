@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
-// RawQuery executes a plain SQL query using Bun formatting and hooks.
+// RawQuery executes a plain SQL query using Boa formatting and hooks.
 type RawQuery struct {
 	baseQuery
 
@@ -99,7 +99,7 @@ func (q *RawQuery) AppendQuery(gen schema.QueryGen, b []byte) ([]byte, error) {
 	if len(q.args) > 0 && strings.IndexByte(q.query, '?') == -1 {
 		if len(gen.Args()) > 0 {
 			// The $n in the raw text would refer to values bound before it.
-			return nil, errors.New("pgcrud: raw SQL with $n placeholders cannot follow bound values; use ? placeholders")
+			return nil, errors.New("boa: raw SQL with $n placeholders cannot follow bound values; use ? placeholders")
 		}
 		gen.BindArgs(q.args...)
 		return append(b, q.query...), nil

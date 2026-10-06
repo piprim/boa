@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -10,17 +10,17 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
-var errNilModel = errors.New("pgcrud: Model(nil)")
+var errNilModel = errors.New("boa: Model(nil)")
 
 var (
 	timeType  = reflect.TypeFor[time.Time]()
 	bytesType = reflect.TypeFor[[]byte]()
 )
 
-// Model is implemented by all Bun models.
+// Model is implemented by all Boa models.
 type Model = schema.Model
 
 type rowScanner interface {
@@ -72,7 +72,7 @@ func newModel(db *DB, dest []any) (Model, error) {
 	for i, el := range dest {
 		v := reflect.ValueOf(el)
 		if v.Kind() != reflect.Pointer {
-			return nil, fmt.Errorf("pgcrud: Scan(non-pointer %T)", dest)
+			return nil, fmt.Errorf("boa: Scan(non-pointer %T)", dest)
 		}
 
 		v = v.Elem()
@@ -98,7 +98,7 @@ func _newModel(db *DB, dest any, scan bool) (Model, error) {
 		return dest, nil
 	case sql.Scanner:
 		if !scan {
-			return nil, fmt.Errorf("pgcrud: Model(unsupported %T)", dest)
+			return nil, fmt.Errorf("boa: Model(unsupported %T)", dest)
 		}
 		return newScanModel(db, []any{dest}), nil
 	}
@@ -108,7 +108,7 @@ func _newModel(db *DB, dest any, scan bool) (Model, error) {
 		return nil, errNilModel
 	}
 	if v.Kind() != reflect.Pointer {
-		return nil, fmt.Errorf("pgcrud: Model(non-pointer %T)", dest)
+		return nil, fmt.Errorf("boa: Model(non-pointer %T)", dest)
 	}
 
 	if v.IsNil() {
@@ -116,7 +116,7 @@ func _newModel(db *DB, dest any, scan bool) (Model, error) {
 		if typ.Kind() == reflect.Struct {
 			return newStructTableModel(db, dest, db.Table(typ)), nil
 		}
-		return nil, fmt.Errorf("pgcrud: Model(nil %s %T)", typ.Kind(), dest)
+		return nil, fmt.Errorf("boa: Model(nil %s %T)", typ.Kind(), dest)
 	}
 
 	v = v.Elem()
@@ -156,7 +156,7 @@ func _newModel(db *DB, dest any, scan bool) (Model, error) {
 		return newScanModel(db, []any{dest}), nil
 	}
 
-	return nil, fmt.Errorf("pgcrud: Model(unsupported %T)", dest)
+	return nil, fmt.Errorf("boa: Model(unsupported %T)", dest)
 }
 
 func newTableModelIndex(
@@ -197,12 +197,12 @@ func newTableModelIndex(
 		}
 	}
 
-	return nil, fmt.Errorf("pgcrud: NewModel(%s)", typ)
+	return nil, fmt.Errorf("boa: NewModel(%s)", typ)
 }
 
 func validMap(typ reflect.Type) error {
 	if typ.Key().Kind() != reflect.String || typ.Elem().Kind() != reflect.Interface {
-		return fmt.Errorf("pgcrud: Model(unsupported %s) (expected *map[string]any)",
+		return fmt.Errorf("boa: Model(unsupported %s) (expected *map[string]any)",
 			typ)
 	}
 	return nil

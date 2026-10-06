@@ -1,4 +1,4 @@
-package pgcrud_test
+package boa_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
-	"github.com/piprim/pgcrud"
+	"github.com/piprim/boa"
 )
 
 // boundArgs returns the values of a recorded call after pgx's option values.
@@ -89,9 +89,9 @@ func TestBoundExecution(t *testing.T) {
 
 	t.Run("WithQueryExecMode puts the mode before the result formats", func(t *testing.T) {
 		exec := &fakeExecutor{rows: newFakeRows(cols("id", "name"))}
-		db := pgcrud.New(nil,
-			pgcrud.WithExecutorResolver(func(context.Context) pgcrud.DBExecutor { return exec }),
-			pgcrud.WithQueryExecMode(pgx.QueryExecModeCacheDescribe))
+		db := boa.New(nil,
+			boa.WithExecutorResolver(func(context.Context) boa.DBExecutor { return exec }),
+			boa.WithQueryExecMode(pgx.QueryExecModeCacheDescribe))
 		var us []User
 		require.NoError(t, db.NewSelect().Model(&us).Scan(ctx))
 		opts := options(exec.calls[0])
@@ -106,9 +106,9 @@ func TestBoundExecution(t *testing.T) {
 
 	t.Run("WithTextResultTypes extends the map", func(t *testing.T) {
 		exec := &fakeExecutor{rows: newFakeRows(cols("id", "name"))}
-		db := pgcrud.New(nil,
-			pgcrud.WithExecutorResolver(func(context.Context) pgcrud.DBExecutor { return exec }),
-			pgcrud.WithTextResultTypes(99999))
+		db := boa.New(nil,
+			boa.WithExecutorResolver(func(context.Context) boa.DBExecutor { return exec }),
+			boa.WithTextResultTypes(99999))
 		var us []User
 		require.NoError(t, db.NewSelect().Model(&us).Scan(ctx))
 		formats := options(exec.calls[0])[0].(pgx.QueryResultFormatsByOID)
@@ -152,7 +152,7 @@ func TestTooManyParams(t *testing.T) {
 		exec := &fakeExecutor{}
 		rs := rows(9363) // 9363 * 7 = 65541
 		_, err := withExec(exec).NewInsert().Model(&rs).Exec(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrTooManyParams)
+		require.ErrorIs(t, err, boa.ErrTooManyParams)
 		require.Contains(t, err.Error(), "65541")
 		require.Empty(t, exec.calls)
 	})
@@ -162,13 +162,13 @@ func TestTooManyParams(t *testing.T) {
 		db := withExec(&fakeExecutor{}).WithQueryHook(hook)
 		rs := rows(9363)
 		_, err := db.NewInsert().Model(&rs).Exec(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrTooManyParams)
-		require.ErrorIs(t, hook.last.Err, pgcrud.ErrTooManyParams)
+		require.ErrorIs(t, err, boa.ErrTooManyParams)
+		require.ErrorIs(t, hook.last.Err, boa.ErrTooManyParams)
 	})
 }
 
 func TestBuildStringArgs(t *testing.T) {
-	db := pgcrud.New(nil)
+	db := boa.New(nil)
 
 	t.Run("Build returns SQL and args that agree", func(t *testing.T) {
 		q := db.NewSelect().Model((*User)(nil)).Where("id = ?", 1).Where("name = ?", "a")
@@ -215,8 +215,8 @@ func TestBuildStringArgs(t *testing.T) {
 
 	t.Run("List and Tuple bind each element", func(t *testing.T) {
 		sql, args, err := db.NewSelect().Model((*User)(nil)).
-			Where("id IN (?)", pgcrud.List([]int64{1, 2, 3})).
-			Where("(id, name) IN (?)", pgcrud.Tuple([][]any{{1, "a"}, {2, "b"}})).
+			Where("id IN (?)", boa.List([]int64{1, 2, 3})).
+			Where("(id, name) IN (?)", boa.Tuple([][]any{{1, "a"}, {2, "b"}})).
 			Build()
 		require.NoError(t, err)
 		require.Contains(t, sql, "IN ($1, $2, $3)")
@@ -274,20 +274,20 @@ func TestRawPlaceholders(t *testing.T) {
 	})
 
 	t.Run("raw String shows $n", func(t *testing.T) {
-		q := pgcrud.New(nil).NewRaw("SELECT ? + ?", 1, 2)
+		q := boa.New(nil).NewRaw("SELECT ? + ?", 1, 2)
 		require.Equal(t, "SELECT $1 + $2", q.String())
 		require.Equal(t, []any{1, 2}, q.Args())
 	})
 
 	t.Run("nested raw $n after a bound value is an error, not a misnumbered statement", func(t *testing.T) {
-		db := pgcrud.New(nil)
+		db := boa.New(nil)
 		_, _, err := db.NewSelect().Table("t").Where("a = ?", 1).
 			Where("id IN (?)", db.NewRaw("SELECT id FROM u WHERE y = $1", 2)).Build()
 		require.ErrorContains(t, err, "raw SQL with $n placeholders")
 	})
 
 	t.Run("nested raw $n rendered before any bound value keeps its numbering", func(t *testing.T) {
-		db := pgcrud.New(nil)
+		db := boa.New(nil)
 		sql, args, err := db.NewSelect().TableExpr("(?) AS t", db.NewRaw("SELECT $1::int AS id", 5)).Where("t.id > ?", 0).Build()
 		require.NoError(t, err)
 		require.Equal(t, `SELECT * FROM (SELECT $1::int AS id) AS t WHERE (t.id > $2)`, sql)
@@ -296,7 +296,7 @@ func TestRawPlaceholders(t *testing.T) {
 }
 
 func TestValuesCasts(t *testing.T) {
-	db := pgcrud.New(nil)
+	db := boa.New(nil)
 
 	t.Run("map slice values are cast from their Go type, nil stays NULL", func(t *testing.T) {
 		rows := []map[string]any{{
@@ -317,15 +317,15 @@ func TestValuesCasts(t *testing.T) {
 }
 
 type SoftUser struct {
-	pgcrud.BaseModel `bun:"table:soft_users,alias:su"`
+	boa.BaseModel `boa:"table:soft_users,alias:su"`
 
-	ID        int64 `bun:",pk"`
+	ID        int64 `boa:",pk"`
 	Name      string
-	DeletedAt time.Time `bun:",soft_delete"`
+	DeletedAt time.Time `boa:",soft_delete"`
 }
 
 func TestSoftDeleteBinds(t *testing.T) {
-	db := pgcrud.New(nil)
+	db := boa.New(nil)
 
 	t.Run("delete becomes an update that binds the timestamp", func(t *testing.T) {
 		sql, args, err := db.NewDelete().Model(&SoftUser{}).Where("id = ?", 1).Build()
@@ -357,30 +357,30 @@ func TestSoftDeleteBinds(t *testing.T) {
 
 // Post, Reply, Label and PostLabel mirror Story, Comment, Tag and StoryTag from
 // integration_test.go under other names, because both files are in package
-// pgcrud_test.
+// boa_test.
 type Post struct {
-	ID       int64 `bun:",pk"`
+	ID       int64 `boa:",pk"`
 	AuthorID int64
-	Replies  []*Reply `bun:"rel:has-many,join:id=post_id"`
-	Labels   []Label  `bun:"m2m:post_labels,join:Post=Label"`
+	Replies  []*Reply `boa:"rel:has-many,join:id=post_id"`
+	Labels   []Label  `boa:"m2m:post_labels,join:Post=Label"`
 }
 
 type Reply struct {
-	ID     int64 `bun:",pk"`
+	ID     int64 `boa:",pk"`
 	PostID int64
 	Body   string
 }
 
 type Label struct {
-	ID   int64 `bun:",pk"`
+	ID   int64 `boa:",pk"`
 	Name string
 }
 
 type PostLabel struct {
-	PostID  int64  `bun:",pk"`
-	Post    *Post  `bun:"rel:belongs-to,join:post_id=id"`
-	LabelID int64  `bun:",pk"`
-	Label   *Label `bun:"rel:belongs-to,join:label_id=id"`
+	PostID  int64  `boa:",pk"`
+	Post    *Post  `boa:"rel:belongs-to,join:post_id=id"`
+	LabelID int64  `boa:",pk"`
+	Label   *Label `boa:"rel:belongs-to,join:label_id=id"`
 }
 
 // multiRowsExecutor serves a different fake row set to each successive Query.
@@ -401,7 +401,7 @@ func (e *multiRowsExecutor) Query(ctx context.Context, sql string, args ...any) 
 
 // relDB returns a DB on exec with the m2m join table registered, which the
 // Post table needs before it is built.
-func relDB(exec pgcrud.DBExecutor) *pgcrud.DB {
+func relDB(exec boa.DBExecutor) *boa.DB {
 	db := withExec(exec)
 	db.RegisterModel((*PostLabel)(nil))
 	return db
@@ -431,7 +431,7 @@ func TestRelationLoadingBinds(t *testing.T) {
 		}}
 		var posts []Post
 		require.NoError(t, relDB(exec).NewSelect().Model(&posts).
-			Relation("Replies", func(q *pgcrud.SelectQuery) *pgcrud.SelectQuery { return q.Where("body <> ?", "spam") }).
+			Relation("Replies", func(q *boa.SelectQuery) *boa.SelectQuery { return q.Where("body <> ?", "spam") }).
 			Scan(ctx))
 		require.Contains(t, exec.calls[1].sql, `IN ($1)`)
 		require.Contains(t, exec.calls[1].sql, `body <> $2`)
@@ -457,7 +457,7 @@ func TestRelationLoadingBinds(t *testing.T) {
 		}}
 		var posts []Post
 		require.NoError(t, relDB(exec).NewSelect().Model(&posts).
-			Relation("Replies", func(q *pgcrud.SelectQuery) *pgcrud.SelectQuery {
+			Relation("Replies", func(q *boa.SelectQuery) *boa.SelectQuery {
 				return q.Column("id", "post_id").ColumnExpr("left(body, ?) AS body", 3)
 			}).
 			Scan(ctx))

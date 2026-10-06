@@ -12,15 +12,17 @@ import (
 
 	"github.com/jinzhu/inflection"
 
-	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/internal/tagparser"
+	"github.com/piprim/boa/dialect"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/internal/tagparser"
 )
 
 const (
 	beforeAppendModelHookFlag internal.Flag = 1 << iota
 	beforeScanRowHookFlag
 	afterScanRowHookFlag
+
+	tagName = "boa"
 )
 
 var (
@@ -140,7 +142,7 @@ func (t *Table) processFields(typ reflect.Type) {
 		sf := typ.Field(i)
 		unexported := sf.PkgPath != ""
 
-		tagstr := sf.Tag.Get("bun")
+		tagstr := sf.Tag.Get(tagName)
 		if tagstr == "-" {
 			names[sf.Name] = struct{}{}
 			continue
@@ -207,7 +209,7 @@ func (t *Table) processFields(typ reflect.Type) {
 		if prefix, ok := tag.Option("embed"); ok {
 			fieldType := indirectType(sf.Type)
 			if fieldType.Kind() != reflect.Struct {
-				panic(fmt.Errorf("pgcrud: embed %s.%s: got %s, wanted reflect.Struct",
+				panic(fmt.Errorf("boa: embed %s.%s: got %s, wanted reflect.Struct",
 					t.TypeName, sf.Name, fieldType.Kind()))
 			}
 
@@ -365,7 +367,7 @@ func (t *Table) String() string {
 
 func (t *Table) CheckPKs() error {
 	if len(t.PKs) == 0 {
-		return fmt.Errorf("pgcrud: %s does not have primary keys", t)
+		return fmt.Errorf("boa: %s does not have primary keys", t)
 	}
 	return nil
 }
@@ -461,7 +463,7 @@ func (t *Table) HasField(name string) bool {
 func (t *Table) Field(name string) (*Field, error) {
 	field, ok := t.FieldMap[name]
 	if !ok {
-		return nil, fmt.Errorf("pgcrud: %s does not have column=%s", t, name)
+		return nil, fmt.Errorf("boa: %s does not have column=%s", t, name)
 	}
 	return field, nil
 }
@@ -476,7 +478,7 @@ func (t *Table) fieldByGoName(name string) *Field {
 }
 
 func (t *Table) processBaseModelField(f reflect.StructField) {
-	tag := tagparser.Parse(f.Tag.Get("bun"))
+	tag := tagparser.Parse(f.Tag.Get(tagName))
 
 	if isKnownTableOption(tag.Name) {
 		internal.Warn.Printf(
@@ -627,7 +629,7 @@ func (t *Table) initRelation(field *Field, rel string) {
 	case "has-many":
 		t.addRelation(t.hasManyRelation(field))
 	default:
-		panic(fmt.Errorf("pgcrud: unknown relation=%s on field=%s", rel, field.GoName))
+		panic(fmt.Errorf("boa: unknown relation=%s on field=%s", rel, field.GoName))
 	}
 }
 
@@ -671,12 +673,12 @@ func (t *Table) belongsToRelationWithTables(field *Field, joinTable, joinPKTable
 	rel.OnDelete = "ON DELETE NO ACTION"
 	if onUpdate, ok := field.Tag.Options["on_update"]; ok {
 		if len(onUpdate) > 1 {
-			panic(fmt.Errorf("pgcrud: %s belongs-to %s: on_update option must be a single field", t.TypeName, field.GoName))
+			panic(fmt.Errorf("boa: %s belongs-to %s: on_update option must be a single field", t.TypeName, field.GoName))
 		}
 
 		rule := strings.ToUpper(onUpdate[0])
 		if !isKnownFKRule(rule) {
-			internal.Warn.Printf("pgcrud: %s belongs-to %s: unknown on_update rule %s", t.TypeName, field.GoName, rule)
+			internal.Warn.Printf("boa: %s belongs-to %s: unknown on_update rule %s", t.TypeName, field.GoName, rule)
 		}
 
 		s := fmt.Sprintf("ON UPDATE %s", rule)
@@ -685,12 +687,12 @@ func (t *Table) belongsToRelationWithTables(field *Field, joinTable, joinPKTable
 
 	if onDelete, ok := field.Tag.Options["on_delete"]; ok {
 		if len(onDelete) > 1 {
-			panic(fmt.Errorf("pgcrud: %s belongs-to %s: on_delete option must be a single field", t.TypeName, field.GoName))
+			panic(fmt.Errorf("boa: %s belongs-to %s: on_delete option must be a single field", t.TypeName, field.GoName))
 		}
 
 		rule := strings.ToUpper(onDelete[0])
 		if !isKnownFKRule(rule) {
-			internal.Warn.Printf("pgcrud: %s belongs-to %s: unknown on_delete rule %s", t.TypeName, field.GoName, rule)
+			internal.Warn.Printf("boa: %s belongs-to %s: unknown on_delete rule %s", t.TypeName, field.GoName, rule)
 		}
 		s := fmt.Sprintf("ON DELETE %s", rule)
 		rel.OnDelete = s
@@ -705,14 +707,14 @@ func (t *Table) belongsToRelationWithTables(field *Field, joinTable, joinPKTable
 				rel.BasePKs = append(rel.BasePKs, f)
 			} else {
 				panic(fmt.Errorf(
-					"pgcrud: %s belongs-to %s: %s must have column %s",
+					"boa: %s belongs-to %s: %s must have column %s",
 					t.TypeName, field.GoName, t.TypeName, baseColumn,
 				))
 			}
 
 			if f := joinTable.FieldMap[joinColumn]; f == nil {
 				panic(fmt.Errorf(
-					"pgcrud: %s belongs-to %s: %s must have column %s",
+					"boa: %s belongs-to %s: %s must have column %s",
 					t.TypeName, field.GoName, joinTable.TypeName, joinColumn,
 				))
 			}
@@ -721,7 +723,7 @@ func (t *Table) belongsToRelationWithTables(field *Field, joinTable, joinPKTable
 				rel.JoinPKs = append(rel.JoinPKs, f)
 			} else {
 				panic(fmt.Errorf(
-					"pgcrud: %s belongs-to %s: %s must have column %s",
+					"boa: %s belongs-to %s: %s must have column %s",
 					t.TypeName, field.GoName, joinPKTable.TypeName, joinColumn,
 				))
 			}
@@ -735,7 +737,7 @@ func (t *Table) belongsToRelationWithTables(field *Field, joinTable, joinPKTable
 			rel.JoinPKs = append(rel.JoinPKs, f)
 		} else {
 			panic(fmt.Errorf(
-				"pgcrud: %s belongs-to %s: %s must have column %s",
+				"boa: %s belongs-to %s: %s must have column %s",
 				t.TypeName, field.GoName, joinPKTable.TypeName, joinPK.Name,
 			))
 		}
@@ -752,7 +754,7 @@ func (t *Table) belongsToRelationWithTables(field *Field, joinTable, joinPKTable
 		}
 
 		panic(fmt.Errorf(
-			"pgcrud: %s belongs-to %s: %s must have column %s "+
+			"boa: %s belongs-to %s: %s must have column %s "+
 				"(to override, use join:base_column=join_column tag on %s field)",
 			t.TypeName, field.GoName, t.TypeName, fkName, field.GoName,
 		))
@@ -783,7 +785,7 @@ func (t *Table) hasOneRelation(field *Field) *Relation {
 				rel.BasePKs = append(rel.BasePKs, f)
 			} else {
 				panic(fmt.Errorf(
-					"pgcrud: %s has-one %s: %s must have column %s",
+					"boa: %s has-one %s: %s must have column %s",
 					field.GoName, t.TypeName, t.TypeName, baseColumn,
 				))
 			}
@@ -793,7 +795,7 @@ func (t *Table) hasOneRelation(field *Field) *Relation {
 				rel.JoinPKs = append(rel.JoinPKs, f)
 			} else {
 				panic(fmt.Errorf(
-					"pgcrud: %s has-one %s: %s must have column %s",
+					"boa: %s has-one %s: %s must have column %s",
 					field.GoName, t.TypeName, joinTable.TypeName, joinColumn,
 				))
 			}
@@ -816,7 +818,7 @@ func (t *Table) hasOneRelation(field *Field) *Relation {
 		}
 
 		panic(fmt.Errorf(
-			"pgcrud: %s has-one %s: %s must have column %s "+
+			"boa: %s has-one %s: %s must have column %s "+
 				"(to override, use join:base_column=join_column tag on %s field)",
 			field.GoName, t.TypeName, joinTable.TypeName, fkName, field.GoName,
 		))
@@ -830,7 +832,7 @@ func (t *Table) hasManyRelation(field *Field) *Relation {
 	}
 	if field.IndirectType.Kind() != reflect.Slice {
 		panic(fmt.Errorf(
-			"pgcrud: %s.%s has-many relation requires slice, got %q",
+			"boa: %s.%s has-many relation requires slice, got %q",
 			t.TypeName, field.GoName, field.IndirectType.Kind(),
 		))
 	}
@@ -863,7 +865,7 @@ func (t *Table) hasManyRelation(field *Field) *Relation {
 				rel.BasePKs = append(rel.BasePKs, f)
 			} else {
 				panic(fmt.Errorf(
-					"pgcrud: %s has-many %s: %s must have column %s",
+					"boa: %s has-many %s: %s must have column %s",
 					t.TypeName, field.GoName, t.TypeName, baseColumn,
 				))
 			}
@@ -872,7 +874,7 @@ func (t *Table) hasManyRelation(field *Field) *Relation {
 				rel.JoinPKs = append(rel.JoinPKs, f)
 			} else {
 				panic(fmt.Errorf(
-					"pgcrud: %s has-many %s: %s must have column %s",
+					"boa: %s has-many %s: %s must have column %s",
 					t.TypeName, field.GoName, joinTable.TypeName, joinColumn,
 				))
 			}
@@ -897,7 +899,7 @@ func (t *Table) hasManyRelation(field *Field) *Relation {
 			}
 
 			panic(fmt.Errorf(
-				"pgcrud: %s has-many %s: %s must have column %s "+
+				"boa: %s has-many %s: %s must have column %s "+
 					"(to override, use join:base_column=join_column tag on the field %s)",
 				t.TypeName, field.GoName, joinTable.TypeName, joinColumn, field.GoName,
 			))
@@ -908,7 +910,7 @@ func (t *Table) hasManyRelation(field *Field) *Relation {
 		rel.PolymorphicField = joinTable.FieldMap[polymorphicColumn]
 		if rel.PolymorphicField == nil {
 			panic(fmt.Errorf(
-				"pgcrud: %s has-many %s: %s must have polymorphic column %s",
+				"boa: %s has-many %s: %s must have polymorphic column %s",
 				t.TypeName, field.GoName, joinTable.TypeName, polymorphicColumn,
 			))
 		}
@@ -925,7 +927,7 @@ func (t *Table) hasManyRelation(field *Field) *Relation {
 func (t *Table) m2mRelation(field *Field) *Relation {
 	if field.IndirectType.Kind() != reflect.Slice {
 		panic(fmt.Errorf(
-			"pgcrud: %s.%s m2m relation requires slice, got %q",
+			"boa: %s.%s m2m relation requires slice, got %q",
 			t.TypeName, field.GoName, field.IndirectType.Kind(),
 		))
 	}
@@ -940,13 +942,13 @@ func (t *Table) m2mRelation(field *Field) *Relation {
 
 	m2mTableName, ok := field.Tag.Option("m2m")
 	if !ok {
-		panic(fmt.Errorf("pgcrud: %s must have m2m tag option", field.GoName))
+		panic(fmt.Errorf("boa: %s must have m2m tag option", field.GoName))
 	}
 
 	m2mTable := t.tables.ByName(m2mTableName)
 	if m2mTable == nil {
 		panic(fmt.Errorf(
-			"pgcrud: can't find m2m %s table (use db.RegisterModel)",
+			"boa: can't find m2m %s table (use db.RegisterModel)",
 			m2mTableName,
 		))
 	}
@@ -977,7 +979,7 @@ func (t *Table) m2mRelation(field *Field) *Relation {
 	leftField := m2mTable.fieldByGoName(leftColumn)
 	if leftField == nil {
 		panic(fmt.Errorf(
-			"pgcrud: %s many-to-many %s: %s must have field %s "+
+			"boa: %s many-to-many %s: %s must have field %s "+
 				"(to override, use tag join:LeftField=RightField on field %s.%s",
 			t.TypeName, field.GoName, m2mTable.TypeName, leftColumn, t.TypeName, field.GoName,
 		))
@@ -986,7 +988,7 @@ func (t *Table) m2mRelation(field *Field) *Relation {
 	rightField := m2mTable.fieldByGoName(rightColumn)
 	if rightField == nil {
 		panic(fmt.Errorf(
-			"pgcrud: %s many-to-many %s: %s must have field %s "+
+			"boa: %s many-to-many %s: %s must have field %s "+
 				"(to override, use tag join:LeftField=RightField on field %s.%s",
 			t.TypeName, field.GoName, m2mTable.TypeName, rightColumn, t.TypeName, field.GoName,
 		))

@@ -59,7 +59,7 @@ func TestArgList(t *testing.T) {
 		b := gen.BindError(nil, errors.New("boom"))
 		gen.BindError(nil, errors.New("second"))
 		require.Equal(t, "?!(boom)", string(b))
-		require.EqualError(t, list.Err(), "pgcrud: bind arg 2: boom")
+		require.EqualError(t, list.Err(), "boa: bind arg 2: boom")
 	})
 
 	t.Run("BindError without a list only writes the marker", func(t *testing.T) {

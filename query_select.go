@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
 type union struct {
@@ -311,7 +311,7 @@ func (q *SelectQuery) JoinOnOr(cond string, args ...any) *SelectQuery {
 
 func (q *SelectQuery) joinOn(cond string, args []any, sep string) *SelectQuery {
 	if len(q.joins) == 0 {
-		q.setErr(errors.New("pgcrud: query has no joins"))
+		q.setErr(errors.New("boa: query has no joins"))
 		return q
 	}
 	j := &q.joins[len(q.joins)-1]
@@ -743,7 +743,7 @@ func (q *SelectQuery) appendTables(gen schema.QueryGen, b []byte) (_ []byte, err
 // The caller must close the rows.
 //
 // On error pgx may return a non-nil, already-closed pgx.Rows alongside the
-// error (bun returned nil rows), so check the error before using the rows.
+// error (boa returned nil rows), so check the error before using the rows.
 func (q *SelectQuery) Rows(ctx context.Context) (pgx.Rows, error) {
 	if q.err != nil {
 		return nil, q.err
@@ -951,7 +951,7 @@ func (q *SelectQuery) scanAndCountConcurrently(
 	var firstErr error
 
 	// FIXME: clone should not be needed, because the query is not modified here
-	// and should not be implicitly modified by the Bun lib.
+	// and should not be implicitly modified by the Boa lib.
 	countQuery := q.Clone()
 
 	// Don't scan results if the user explicitly set Limit(-1).

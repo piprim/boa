@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/internal/tagparser"
+	"github.com/piprim/boa/dialect"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/internal/tagparser"
 )
 
 type Field struct {
@@ -118,7 +118,7 @@ func (f *Field) appendValue(gen QueryGen, b []byte, strct reflect.Value, default
 		return dialect.AppendNull(b)
 	}
 	if f.Append == nil {
-		panic(fmt.Errorf("pgcrud: AppendValue(unsupported %s)", fv.Type()))
+		panic(fmt.Errorf("boa: AppendValue(unsupported %s)", fv.Type()))
 	}
 	return f.Append(gen, b, fv)
 }
@@ -137,7 +137,7 @@ func (f *Field) ScanValue(strct reflect.Value, src any) error {
 
 func (f *Field) ScanWithCheck(fv reflect.Value, src any) error {
 	if f.Scan == nil {
-		return fmt.Errorf("pgcrud: Scan(unsupported %s)", f.IndirectType)
+		return fmt.Errorf("boa: Scan(unsupported %s)", f.IndirectType)
 	}
 	return f.Scan(fv, src)
 }

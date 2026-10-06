@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/piprim/pgcrud/dialect"
-	"github.com/piprim/pgcrud/dialect/sqltype"
+	"github.com/piprim/boa/dialect"
+	"github.com/piprim/boa/dialect/sqltype"
 )
 
 type (
@@ -277,7 +277,7 @@ func appendDriverValue(gen QueryGen, b []byte, v reflect.Value) []byte {
 func addrAppender(fn AppenderFunc) AppenderFunc {
 	return func(gen QueryGen, b []byte, v reflect.Value) []byte {
 		if !v.CanAddr() {
-			err := fmt.Errorf("pgcrud: Append(nonaddressable %T)", v.Interface())
+			err := fmt.Errorf("boa: Append(nonaddressable %T)", v.Interface())
 			return gen.BindError(b, err)
 		}
 		return fn(gen, b, v.Addr())

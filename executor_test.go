@@ -1,4 +1,4 @@
-package pgcrud_test
+package boa_test
 
 import (
 	"context"

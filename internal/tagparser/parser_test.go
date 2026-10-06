@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/piprim/pgcrud/internal/tagparser"
+	"github.com/piprim/boa/internal/tagparser"
 )
 
 var tagTests = []struct {

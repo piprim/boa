@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 type hasManyModel struct {
@@ -83,7 +83,7 @@ func (m *hasManyModel) Scan(src any) error {
 
 	field := m.table.LookupField(column)
 	if field == nil {
-		return fmt.Errorf("pgcrud: %s does not have column %q", m.table.TypeName, column)
+		return fmt.Errorf("boa: %s does not have column %q", m.table.TypeName, column)
 	}
 
 	if err := field.ScanValue(m.strct, src); err != nil {
@@ -105,7 +105,7 @@ func (m *hasManyModel) parkStruct() error {
 	baseValues, ok := m.baseValues[internal.NewMapKey(m.structKey)]
 	if !ok {
 		return fmt.Errorf(
-			"pgcrud: has-many relation=%s does not have base %s with id=%q (check join conditions)",
+			"boa: has-many relation=%s does not have base %s with id=%q (check join conditions)",
 			m.rel.Field.GoName, m.baseTable, m.structKey)
 	}
 

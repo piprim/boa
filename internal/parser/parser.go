@@ -6,7 +6,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/piprim/pgcrud/internal"
+	"github.com/piprim/boa/internal"
 )
 
 type Parser struct {

@@ -6,8 +6,8 @@ import (
 	"net"
 	"reflect"
 
-	"github.com/piprim/pgcrud/dialect/sqltype"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/dialect/sqltype"
+	"github.com/piprim/boa/schema"
 )
 
 const (

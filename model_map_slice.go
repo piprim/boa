@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
 type mapSliceModel struct {
@@ -132,7 +132,7 @@ func (m *mapSliceModel) initKeys() error {
 
 	slice := *m.dest
 	if len(slice) == 0 {
-		return errors.New("pgcrud: map slice is empty")
+		return errors.New("boa: map slice is empty")
 	}
 
 	first := slice[0]

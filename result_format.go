@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"github.com/jackc/pgx/v5"
@@ -9,7 +9,7 @@ import (
 // smaller OID, and pgx registers only built-in types by default.
 const lastBuiltinOID = 16384
 
-// textResultFormats returns the result-format overrides pgcrud passes on
+// textResultFormats returns the result-format overrides boa passes on
 // every Query and QueryRow. Every array, range and multirange type pgx knows
 // is requested in text, because the library parses those from their text
 // form; pgx would otherwise hand the scanners binary wire bytes.

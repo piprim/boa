@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 type Range[T any] struct {

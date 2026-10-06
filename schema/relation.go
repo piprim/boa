@@ -46,8 +46,8 @@ type Relation struct {
 // and can be used exclusively for joining tables at query time. For example:
 //
 //	type User struct {
-//		ID int64			`bun:",pk"`
-//		Profile *Profile	`bun:",rel:has-one,join:id=user_id"`
+//		ID int64			`boa:",pk"`
+//		Profile *Profile	`boa:",rel:has-one,join:id=user_id"`
 //	}
 //
 // Creating a FK users.id -> profiles.user_id would be confusing and incorrect,
@@ -57,11 +57,11 @@ type Relation struct {
 //
 //	// UsersToGroups maps users to groups they follow.
 //	type UsersToGroups struct {
-//		UserID string	`bun:"user_id,pk"`		// Needs FK to users.id
-//		GroupID string	`bun:"group_id,pk"`		// Needs FK to groups.id
+//		UserID string	`boa:"user_id,pk"`		// Needs FK to users.id
+//		GroupID string	`boa:"group_id,pk"`		// Needs FK to groups.id
 //
-//		User	*User	`bun:"rel:belongs-to,join:user_id=id"`
-//		Group	*Group	`bun:"rel:belongs-to,join:group_id=id"`
+//		User	*User	`boa:"rel:belongs-to,join:user_id=id"`
+//		Group	*Group	`boa:"rel:belongs-to,join:group_id=id"`
 //	}
 //
 // Here BooksToReaders has a composite primary key, composed of other primary keys.

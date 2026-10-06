@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/piprim/pgcrud/dialect/pgdialect"
-	"github.com/piprim/pgcrud/internal"
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/dialect/pgdialect"
+	"github.com/piprim/boa/internal"
+	"github.com/piprim/boa/schema"
 )
 
 const (
@@ -82,7 +82,7 @@ func WithQueryExecMode(mode pgx.QueryExecMode) DBOption {
 
 // WithTextResultTypes asks Postgres to return the given column types in text
 // format. Use it for types the application registered on the pool with a
-// codec that prefers binary but that pgcrud scans with its text parsers.
+// codec that prefers binary but that boa scans with its text parsers.
 func WithTextResultTypes(oids ...uint32) DBOption {
 	return func(db *DB) {
 		for _, oid := range oids {
@@ -361,7 +361,7 @@ func (db *DB) ScanRow(ctx context.Context, rows pgx.Rows, dest ...any) error {
 
 	rs, ok := model.(rowScanner)
 	if !ok {
-		return fmt.Errorf("pgcrud: %T does not support ScanRow", model)
+		return fmt.Errorf("boa: %T does not support ScanRow", model)
 	}
 
 	return rs.ScanRow(ctx, rows)
@@ -445,7 +445,7 @@ func (db *DB) Exec(ctx context.Context, query string, args ...any) (pgconn.Comma
 // returning pgx rows. The caller must close the rows.
 //
 // On error pgx may return a non-nil, already-closed pgx.Rows alongside the
-// error (bun returned nil rows), so check the error before using the rows.
+// error (boa returned nil rows), so check the error before using the rows.
 func (db *DB) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
 	sql, bound, err := db.build(NewRawQuery(db, query, args...))
 	if err != nil {

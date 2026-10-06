@@ -38,7 +38,7 @@ func (l *ArgList) add(v any) int {
 
 func (l *ArgList) setErr(err error) {
 	if l.err == nil {
-		l.err = fmt.Errorf("pgcrud: bind arg %d: %w", len(l.args)+1, err)
+		l.err = fmt.Errorf("boa: bind arg %d: %w", len(l.args)+1, err)
 	}
 }
 

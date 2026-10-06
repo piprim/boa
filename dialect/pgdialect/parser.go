@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 
-	"github.com/piprim/pgcrud/internal/parser"
+	"github.com/piprim/boa/internal/parser"
 )
 
 type pgparser struct {

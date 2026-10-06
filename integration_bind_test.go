@@ -1,4 +1,4 @@
-package pgcrud_test
+package boa_test
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/piprim/pgcrud"
-	"github.com/piprim/pgcrud/dialect/pgdialect"
+	"github.com/piprim/boa"
+	"github.com/piprim/boa/dialect/pgdialect"
 )
 
 func TestIntegrationBindMapping(t *testing.T) {
@@ -160,7 +160,7 @@ func TestIntegrationBindStatements(t *testing.T) {
 			bulk[i] = Comment{StoryID: stories[0].ID, Body: "b"}
 		}
 		_, err := db.NewInsert().Model(&bulk).Exec(ctx) // 80000 params
-		require.ErrorIs(t, err, pgcrud.ErrTooManyParams)
+		require.ErrorIs(t, err, boa.ErrTooManyParams)
 	})
 
 	t.Run("the same statement is prepared once per connection", func(t *testing.T) {

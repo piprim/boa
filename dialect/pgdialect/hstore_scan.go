@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
 func hstoreScanner(typ reflect.Type) schema.ScannerFunc {
@@ -25,14 +25,14 @@ func hstoreScanner(typ reflect.Type) schema.ScannerFunc {
 		return scanMapStringStringValue
 	}
 	return func(dest reflect.Value, src any) error {
-		return fmt.Errorf("pgcrud: Hstore(unsupported %s)", dest.Type())
+		return fmt.Errorf("boa: Hstore(unsupported %s)", dest.Type())
 	}
 }
 
 func scanMapStringStringValue(dest reflect.Value, src any) error {
 	dest = reflect.Indirect(dest)
 	if !dest.CanSet() {
-		return fmt.Errorf("pgcrud: Scan(non-settable %s)", dest.Type())
+		return fmt.Errorf("boa: Scan(non-settable %s)", dest.Type())
 	}
 
 	m, err := decodeMapStringString(src)

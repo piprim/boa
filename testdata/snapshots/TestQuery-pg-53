@@ -1,2 +1,2 @@
 INSERT INTO "models" ("array") VALUES ($1)
--- args: []interface {}{[]pgcrud_test.mystr{"foo", "bar"}}
+-- args: []interface {}{[]boa_test.mystr{"foo", "bar"}}

@@ -1,4 +1,4 @@
-package pgcrud
+package boa
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/piprim/pgcrud/schema"
+	"github.com/piprim/boa/schema"
 )
 
 // Regression test for #1388: Clone must copy execution state, not only the

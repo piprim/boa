@@ -1,4 +1,4 @@
-package pgcrud_test
+package boa_test
 
 import (
 	"context"
@@ -9,18 +9,18 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
-	"github.com/piprim/pgcrud"
+	"github.com/piprim/boa"
 )
 
 type User struct {
-	ID   int64 `bun:",pk"`
+	ID   int64 `boa:",pk"`
 	Name string
 }
 
 type ctxKey struct{}
 
-func withExec(exec pgcrud.DBExecutor) *pgcrud.DB {
-	return pgcrud.New(nil, pgcrud.WithExecutorResolver(func(context.Context) pgcrud.DBExecutor {
+func withExec(exec boa.DBExecutor) *boa.DB {
+	return boa.New(nil, boa.WithExecutorResolver(func(context.Context) boa.DBExecutor {
 		return exec
 	}))
 }
@@ -29,27 +29,27 @@ func TestNew(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("builds SQL without a pool", func(t *testing.T) {
-		db := pgcrud.New(nil)
+		db := boa.New(nil)
 		q := db.NewSelect().Model((*User)(nil)).Where("id = ?", 1)
 		require.Equal(t, `SELECT "user"."id", "user"."name" FROM "users" AS "user" WHERE (id = $1)`, q.String())
 	})
 
 	t.Run("executing without a pool returns ErrNilExecutor", func(t *testing.T) {
-		db := pgcrud.New(nil)
+		db := boa.New(nil)
 		var u User
 		err := db.NewSelect().Model(&u).Scan(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrNilExecutor)
+		require.ErrorIs(t, err, boa.ErrNilExecutor)
 	})
 
 	t.Run("String names the dialect", func(t *testing.T) {
-		require.Equal(t, "DB<dialect=pg>", pgcrud.New(nil).String())
+		require.Equal(t, "DB<dialect=pg>", boa.New(nil).String())
 	})
 }
 
 func TestExecutorResolver(t *testing.T) {
 	exec := &fakeExecutor{rows: newFakeRows(cols("id", "name"), []any{int64(1), "ann"})}
 	var seen context.Context
-	db := pgcrud.New(nil, pgcrud.WithExecutorResolver(func(ctx context.Context) pgcrud.DBExecutor {
+	db := boa.New(nil, boa.WithExecutorResolver(func(ctx context.Context) boa.DBExecutor {
 		seen = ctx
 		return exec
 	}))
@@ -74,7 +74,7 @@ func TestExecutorResolver(t *testing.T) {
 	t.Run("nil resolver result returns ErrNilExecutor", func(t *testing.T) {
 		db := withExec(nil)
 		_, err := db.NewDelete().Model((*User)(nil)).Where("id = 1").Exec(context.Background())
-		require.ErrorIs(t, err, pgcrud.ErrNilExecutor)
+		require.ErrorIs(t, err, boa.ErrNilExecutor)
 	})
 }
 
@@ -216,38 +216,38 @@ func (t *fakeTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 
 func TestTxRequiredForWrites(t *testing.T) {
 	ctx := context.Background()
-	strict := func(exec pgcrud.DBExecutor) *pgcrud.DB {
-		return pgcrud.New(nil,
-			pgcrud.WithExecutorResolver(func(context.Context) pgcrud.DBExecutor { return exec }),
-			pgcrud.WithTxRequiredForWrites())
+	strict := func(exec boa.DBExecutor) *boa.DB {
+		return boa.New(nil,
+			boa.WithExecutorResolver(func(context.Context) boa.DBExecutor { return exec }),
+			boa.WithTxRequiredForWrites())
 	}
 
 	t.Run("insert outside a transaction fails before reaching the executor", func(t *testing.T) {
 		exec := &fakeExecutor{tag: pgconn.NewCommandTag("INSERT 0 1")}
 		_, err := strict(exec).NewInsert().Model(&User{ID: 1, Name: "a"}).Exec(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrTxRequired)
+		require.ErrorIs(t, err, boa.ErrTxRequired)
 		require.Empty(t, exec.calls)
 	})
 
 	t.Run("update and delete fail the same way", func(t *testing.T) {
 		exec := &fakeExecutor{}
 		_, err := strict(exec).NewUpdate().Model((*User)(nil)).Set("name = 'b'").Where("id = 1").Exec(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrTxRequired)
+		require.ErrorIs(t, err, boa.ErrTxRequired)
 		_, err = strict(exec).NewDelete().Model((*User)(nil)).Where("id = 1").Exec(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrTxRequired)
+		require.ErrorIs(t, err, boa.ErrTxRequired)
 		require.Empty(t, exec.calls)
 	})
 
 	t.Run("DB.Exec is a write", func(t *testing.T) {
 		exec := &fakeExecutor{}
 		_, err := strict(exec).Exec(ctx, "TRUNCATE users")
-		require.ErrorIs(t, err, pgcrud.ErrTxRequired)
+		require.ErrorIs(t, err, boa.ErrTxRequired)
 	})
 
 	t.Run("raw non-select is a write, raw select is a read", func(t *testing.T) {
 		exec := &fakeExecutor{rows: newFakeRows(cols("id", "name"), []any{int64(1), "a"})}
 		_, err := strict(exec).NewRaw("WITH x AS (SELECT 1) INSERT INTO users SELECT 1, 'a'").Exec(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrTxRequired)
+		require.ErrorIs(t, err, boa.ErrTxRequired)
 		var u User
 		require.NoError(t, strict(exec).NewRaw("SELECT id, name FROM users").Scan(ctx, &u))
 		require.Equal(t, "a", u.Name)
@@ -271,8 +271,8 @@ func TestTxRequiredForWrites(t *testing.T) {
 		hook := &recordingHook{}
 		db := strict(&fakeExecutor{}).WithQueryHook(hook)
 		_, err := db.NewDelete().Model((*User)(nil)).Where("id = 1").Exec(ctx)
-		require.ErrorIs(t, err, pgcrud.ErrTxRequired)
-		require.ErrorIs(t, hook.last.Err, pgcrud.ErrTxRequired)
+		require.ErrorIs(t, err, boa.ErrTxRequired)
+		require.ErrorIs(t, hook.last.Err, boa.ErrTxRequired)
 	})
 
 	t.Run("option off allows writes on any executor", func(t *testing.T) {
@@ -317,15 +317,15 @@ func methods(calls []call) []string {
 
 type recordingHook struct {
 	before, after int
-	last          *pgcrud.QueryEvent
+	last          *boa.QueryEvent
 }
 
-func (h *recordingHook) BeforeQuery(ctx context.Context, e *pgcrud.QueryEvent) context.Context {
+func (h *recordingHook) BeforeQuery(ctx context.Context, e *boa.QueryEvent) context.Context {
 	h.before++
 	return ctx
 }
 
-func (h *recordingHook) AfterQuery(ctx context.Context, e *pgcrud.QueryEvent) {
+func (h *recordingHook) AfterQuery(ctx context.Context, e *boa.QueryEvent) {
 	h.after++
 	h.last = e
 }
@@ -336,9 +336,9 @@ func TestQueryHooks(t *testing.T) {
 	t.Run("hook sees the command tag on success", func(t *testing.T) {
 		hook := &recordingHook{}
 		exec := &fakeExecutor{tag: pgconn.NewCommandTag("DELETE 2")}
-		db := pgcrud.New(nil,
-			pgcrud.WithExecutorResolver(func(context.Context) pgcrud.DBExecutor { return exec }),
-			pgcrud.WithQueryHook(hook))
+		db := boa.New(nil,
+			boa.WithExecutorResolver(func(context.Context) boa.DBExecutor { return exec }),
+			boa.WithQueryHook(hook))
 		_, err := db.NewDelete().Model((*User)(nil)).Where("id > 0").Exec(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 1, hook.before)

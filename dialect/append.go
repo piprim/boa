@@ -1,7 +1,7 @@
 package dialect
 
 import (
-	"github.com/piprim/pgcrud/internal"
+	"github.com/piprim/boa/internal"
 )
 
 func AppendNull(b []byte) []byte {
