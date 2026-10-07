@@ -23,6 +23,8 @@ type UpdateQuery struct {
 
 var _ Query = (*UpdateQuery)(nil)
 
+var errEmptySet = errors.New("boa: empty SET clause is not allowed in the UPDATE query")
+
 // NewUpdateQuery returns a new UpdateQuery attached to the provided DB.
 func NewUpdateQuery(db *DB) *UpdateQuery {
 	q := &UpdateQuery{
@@ -319,7 +321,7 @@ func (q *UpdateQuery) mustAppendSet(gen schema.QueryGen, b []byte) (_ []byte, er
 	}
 
 	if len(b) == pos {
-		return nil, errors.New("boa: empty SET clause is not allowed in the UPDATE query")
+		return nil, errEmptySet
 	}
 	return b, nil
 }
@@ -348,18 +350,36 @@ func (q *UpdateQuery) Bulk() *UpdateQuery {
 		return q
 	}
 
-	set, err := q.updateSliceSet(q.db.gen, model)
+	unset, err := q.unsetInBulk(model)
 	if err != nil {
 		q.setErr(err)
 		return q
 	}
-	if err := q.unsetInBulk(model); err != nil {
+	// A column unset in every row is not in VALUES; SET either leaves it
+	// out or, when Column named it, resets it like the single-model update.
+	defaults := map[string]bool{}
+	var names []string
+	for _, f := range unset {
+		if q.columnsNamed {
+			defaults[f.Name] = true
+		}
+		names = append(names, f.Name)
+	}
+	q.excludeColumn(names)
+
+	set, err := q.updateSliceSet(q.db.gen, model, defaults)
+	if err != nil {
 		q.setErr(err)
+		return q
+	}
+	if set == "" {
+		q.setErr(errEmptySet)
 		return q
 	}
 
 	values := q.db.NewValues(model)
 	values.customValueQuery = q.customValueQuery
+	values.excludeColumn(names)
 
 	return q.With("_data", values).
 		Model(model).
@@ -368,27 +388,41 @@ func (q *UpdateQuery) Bulk() *UpdateQuery {
 		Where(q.updateSliceWhere(q.db.gen, model))
 }
 
-// unsetInBulk returns an error naming the first unset field of the slice.
-// Bulk writes every column of every row through a VALUES table and cannot
-// leave one out, so an unset field would silently become NULL.
-func (q *UpdateQuery) unsetInBulk(model *sliceTableModel) error {
+// unsetInBulk returns the fields unset in every row of the slice. A field
+// unset in some rows only is an error: Bulk writes every column of every
+// row through a VALUES table and cannot leave one cell out, so it would
+// silently become NULL. ponytail: a per-row skip needs a flag column and a
+// CASE per SET entry; add it if callers bulk rows of differing shapes.
+func (q *UpdateQuery) unsetInBulk(model *sliceTableModel) ([]*schema.Field, error) {
 	fields, err := q.getDataFields()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	for i := 0; i < model.slice.Len(); i++ {
-		row := indirect(model.slice.Index(i))
-		for _, f := range fields {
-			if f.HasUnsetValue(row) {
-				return fmt.Errorf("boa: Bulk cannot skip the unset field %s of row %d: set it or update the rows one by one", f.Name, i)
+	n := model.slice.Len()
+	var all []*schema.Field
+	for _, f := range fields {
+		count := 0
+		for i := 0; i < n; i++ {
+			if f.HasUnsetValue(indirect(model.slice.Index(i))) {
+				count++
 			}
 		}
+		switch {
+		case count == 0:
+		case count == n:
+			all = append(all, f)
+		default:
+			return nil, fmt.Errorf("boa: Bulk cannot skip the field %s, unset in %d of %d rows: set it everywhere or update the rows one by one", f.Name, count, n)
+		}
 	}
-	return nil
+	return all, nil
 }
 
+// updateSliceSet builds the SET list of a bulk update: every data column
+// takes its value from the VALUES table, and the columns in defaults are
+// reset with DEFAULT instead.
 func (q *UpdateQuery) updateSliceSet(
-	gen schema.QueryGen, model *sliceTableModel,
+	gen schema.QueryGen, model *sliceTableModel, defaults map[string]bool,
 ) (string, error) {
 	fields, err := q.getDataFields()
 	if err != nil {
@@ -397,17 +431,24 @@ func (q *UpdateQuery) updateSliceSet(
 
 	var b []byte
 	pos := len(b)
-	for _, field := range fields {
-		if field.SkipUpdate() {
-			continue
-		}
+	write := func(f *schema.Field, value string) {
 		if len(b) != pos {
 			b = append(b, ", "...)
 			pos = len(b)
 		}
-		b = append(b, field.SQLName...)
-		b = append(b, " = _data."...)
-		b = append(b, field.SQLName...)
+		b = append(b, f.SQLName...)
+		b = append(b, " = "...)
+		b = append(b, value...)
+	}
+	for _, field := range fields {
+		if !field.SkipUpdate() {
+			write(field, "_data."+string(field.SQLName))
+		}
+	}
+	for _, field := range model.table.DataFields {
+		if defaults[field.Name] {
+			write(field, "DEFAULT")
+		}
 	}
 	return internal.String(b), nil
 }

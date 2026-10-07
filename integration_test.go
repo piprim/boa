@@ -559,3 +559,33 @@ func TestIntegrationUnset(t *testing.T) {
 		require.Nil(t, cleared.Memo.val)
 	})
 }
+
+func TestIntegrationBulkUnset(t *testing.T) {
+	db, _ := testDB(t)
+	ctx := context.Background()
+
+	rows := []TriRow{{Name: "a", Memo: triValue("m1")}, {Name: "b", Memo: triValue("m2")}}
+	_, err := db.NewInsert().Model(&rows).Returning("id").Exec(ctx)
+	require.NoError(t, err)
+
+	// memo is unset in every row: it must survive; note is set and cast as text
+	patch := []TriRow{{ID: rows[0].ID, Name: "a2", Note: triValue("n")}, {ID: rows[1].ID, Name: "b2", Note: triNull()}}
+	_, err = db.NewUpdate().Model(&patch).Bulk().Exec(ctx)
+	require.NoError(t, err)
+
+	var got []TriRow
+	require.NoError(t, db.NewSelect().Model(&got).Where("id IN (?, ?)", rows[0].ID, rows[1].ID).Order("id").Scan(ctx))
+	require.Len(t, got, 2)
+
+	t.Run("a bulk update writes the set presence fields", func(t *testing.T) {
+		require.Equal(t, "a2", got[0].Name)
+		require.NotNil(t, got[0].Note.val)
+		require.Equal(t, "n", *got[0].Note.val)
+		require.Nil(t, got[1].Note.val)
+	})
+
+	t.Run("a bulk update leaves a column unset in every row untouched", func(t *testing.T) {
+		require.Equal(t, "m1", *got[0].Memo.val)
+		require.Equal(t, "m2", *got[1].Memo.val)
+	})
+}

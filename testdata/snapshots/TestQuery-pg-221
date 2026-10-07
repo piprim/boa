@@ -1,0 +1,2 @@
+WITH "_data" ("id", "name", "note", "memo") AS (VALUES ($1::BIGINT, $2::VARCHAR, $3::VARCHAR, $4::VARCHAR), ($5::BIGINT, $6::VARCHAR, $7::VARCHAR, $8::VARCHAR)) UPDATE "tri_models" AS "tri_model" SET "name" = _data."name", "note" = _data."note", "memo" = _data."memo" FROM _data WHERE ("tri_model"."id" = _data."id")
+-- args: []interface {}{1, "a", "n", interface {}(nil), 2, "b", "m", "x"}

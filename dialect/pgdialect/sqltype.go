@@ -55,6 +55,9 @@ func sqlType(typ reflect.Type) string {
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
+	if elem := presenceElem(typ); elem != nil {
+		return sqlType(elem)
+	}
 
 	switch typ {
 	case nullStringType: // typ.Kind() == reflect.Struct, test for exact match
@@ -88,3 +91,20 @@ func sqlType(typ reflect.Type) string {
 
 	return sqlType
 }
+
+// presenceElem returns T for a three-state type like presence.Of[T], which
+// binds T's value and so is cast like T, not like a struct. Such a type has
+// IsUnset() bool and a Ptr() *T method; it returns nil for any other type.
+func presenceElem(typ reflect.Type) reflect.Type {
+	ptr := reflect.PointerTo(typ)
+	if !ptr.Implements(isUnsetterType) {
+		return nil
+	}
+	m, ok := ptr.MethodByName("Ptr")
+	if !ok || m.Type.NumIn() != 1 || m.Type.NumOut() != 1 || m.Type.Out(0).Kind() != reflect.Pointer {
+		return nil
+	}
+	return m.Type.Out(0).Elem()
+}
+
+var isUnsetterType = reflect.TypeFor[interface{ IsUnset() bool }]()

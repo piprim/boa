@@ -25,6 +25,10 @@ func triNull() tri          { return tri{set: true} }
 
 func (t *tri) IsUnset() bool { return !t.set }
 
+// Ptr mirrors presence.Of: its return type tells boa the element type,
+// so a bulk VALUES table casts the column like a plain string.
+func (t *tri) Ptr() *string { return t.val }
+
 // IsZero mirrors presence.Of: only unset is zero, null is a set value.
 func (t tri) IsZero() bool { return !t.set }
 
@@ -1561,6 +1565,51 @@ func TestQuery(t *testing.T) {
 					{ID: 1, Name: "a", Note: triValue("n"), Memo: triValue("m")},
 					{ID: 2, Name: "b", Note: triNull()},
 				}
+				return db.NewUpdate().Model(&rows).Bulk()
+			},
+		},
+		{
+			id: 221,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// every field set: a presence field is cast like its element, not JSONB
+				rows := []TriModel{
+					{ID: 1, Name: "a", Note: triValue("n"), Memo: triNull()},
+					{ID: 2, Name: "b", Note: triValue("m"), Memo: triValue("x")},
+				}
+				return db.NewUpdate().Model(&rows).Bulk()
+			},
+		},
+		{
+			id: 222,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// a column unset in every row is left out of SET and VALUES
+				rows := []TriModel{
+					{ID: 1, Name: "a", Note: triValue("n")},
+					{ID: 2, Name: "b", Note: triNull()},
+				}
+				return db.NewUpdate().Model(&rows).Bulk()
+			},
+		},
+		{
+			id: 223,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// Column names the column unset in every row: DEFAULT, as for one model
+				rows := []TriModel{
+					{ID: 1, Name: "a"},
+					{ID: 2, Name: "b"},
+				}
+				return db.NewUpdate().Model(&rows).Column("name", "memo").Bulk()
+			},
+		},
+		{
+			id: 224,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// every data column unset everywhere: the error of an empty SET
+				type OnlyTri struct {
+					ID   int64 `boa:",pk"`
+					Note tri
+				}
+				rows := []OnlyTri{{ID: 1}, {ID: 2}}
 				return db.NewUpdate().Model(&rows).Bulk()
 			},
 		},
