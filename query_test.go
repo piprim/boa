@@ -1539,6 +1539,20 @@ func TestQuery(t *testing.T) {
 			},
 		},
 		{
+			id: 219,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// Column names the unset field: it is reset to its default, as on insert
+				return db.NewUpdate().Model(&TriModel{ID: 1, Name: "a"}).Column("name", "memo").WherePK()
+			},
+		},
+		{
+			id: 220,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// ExcludeColumn does not name the unset field: it is still skipped
+				return db.NewUpdate().Model(&TriModel{ID: 1, Name: "a"}).ExcludeColumn("note").WherePK()
+			},
+		},
+		{
 			id: 218,
 			query: func(db *boa.DB) schema.QueryAppender {
 				// Bulk writes every column of every row, so an unset field is an error

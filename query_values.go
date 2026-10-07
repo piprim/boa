@@ -232,7 +232,7 @@ func (q *ValuesQuery) appendSet(gen schema.QueryGen, b []byte) (_ []byte, err er
 		if err != nil {
 			return nil, err
 		}
-		return q.appendSetStruct(gen, b, model, fields)
+		return q.appendSetStruct(gen, b, model, fields, q.columnsNamed)
 	default:
 		return nil, fmt.Errorf("boa: SetValues(unsupported %T)", model)
 	}

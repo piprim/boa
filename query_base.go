@@ -61,6 +61,7 @@ type baseQuery struct {
 	modelTableName schema.QueryWithArgs
 	tables         []schema.QueryWithArgs
 	columns        []schema.QueryWithArgs
+	columnsNamed   bool // Column was called, as opposed to ExcludeColumn
 
 	flags internal.Flag
 }
@@ -298,6 +299,7 @@ func (q *baseQuery) addTable(table schema.QueryWithArgs) {
 
 func (q *baseQuery) addColumn(column schema.QueryWithArgs) {
 	q.columns = append(q.columns, column)
+	q.columnsNamed = true
 }
 
 func (q *baseQuery) excludeColumn(columns []string) {
@@ -1057,8 +1059,11 @@ func (q *setQuery) appendSet(gen schema.QueryGen, b []byte) (_ []byte, err error
 	return b, nil
 }
 
+// appendSetStruct writes the SET list of a struct model. columnsNamed is
+// true when Column listed the fields: an unset field named there is reset
+// with DEFAULT, as insert does, instead of being skipped.
 func (q *setQuery) appendSetStruct(
-	gen schema.QueryGen, b []byte, model *structTableModel, fields []*schema.Field,
+	gen schema.QueryGen, b []byte, model *structTableModel, fields []*schema.Field, columnsNamed bool,
 ) (_ []byte, err error) {
 	isTemplate := gen.IsNop()
 	pos := len(b)
@@ -1070,10 +1075,11 @@ func (q *setQuery) appendSetStruct(
 		app, hasValue := q.modelValues[f.Name]
 
 		// An unset field (schema.Field.IsUnset) is not touched unless Value
-		// names the column. ponytail: the bulk slice update builds its SET
-		// from the field list in updateSliceSet and still writes every
-		// column; make it per-row if bulk PATCH is ever needed.
-		if !hasValue && f.HasUnsetValue(model.strct) {
+		// or Column names the column. ponytail: the bulk slice update builds
+		// its SET from the field list in updateSliceSet and still writes
+		// every column; make it per-row if bulk PATCH is ever needed.
+		unset := !hasValue && f.HasUnsetValue(model.strct)
+		if unset && !columnsNamed {
 			continue
 		}
 
@@ -1091,6 +1097,11 @@ func (q *setQuery) appendSetStruct(
 
 		if isTemplate {
 			b = append(b, '?')
+			continue
+		}
+
+		if unset {
+			b = append(b, "DEFAULT"...)
 			continue
 		}
 

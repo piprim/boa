@@ -290,7 +290,7 @@ func (q *UpdateQuery) mustAppendSet(gen schema.QueryGen, b []byte) (_ []byte, er
 			return nil, err
 		}
 
-		b, err = q.appendSetStruct(gen, b, model, fields)
+		b, err = q.appendSetStruct(gen, b, model, fields, q.columnsNamed)
 		if err != nil {
 			return nil, err
 		}
