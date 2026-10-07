@@ -1,0 +1,2 @@
+UPDATE "tri_models" AS "tri_model" SET "name" = $1, "note" = $2 WHERE ("tri_model"."id" = $3)
+-- args: []interface {}{"a", interface {}(nil), 1}

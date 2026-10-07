@@ -69,6 +69,13 @@ CREATE TABLE story_tags (
 	tag_id   bigint NOT NULL REFERENCES tags(id),
 	PRIMARY KEY (story_id, tag_id)
 );
+DROP TABLE IF EXISTS tri_rows;
+CREATE TABLE tri_rows (
+	id   bigserial PRIMARY KEY,
+	name text NOT NULL,
+	note text,
+	memo text DEFAULT 'dflt'
+);
 `
 
 type Author struct {
@@ -121,6 +128,14 @@ type Kitchen struct {
 	OK       bool `boa:"ok"`
 	At       time.Time
 	Nullable sql.NullString
+}
+
+// TriRow holds three-state columns (see tri in query_test.go).
+type TriRow struct {
+	ID   int64 `boa:",pk,autoincrement"`
+	Name string
+	Note tri
+	Memo tri `boa:",default:'dflt'"`
 }
 
 type StoryTag struct {
@@ -493,5 +508,54 @@ func TestIntegrationUnitOfWork(t *testing.T) {
 		n, err := db.NewSelect().Model((*Tag)(nil)).Where("name = ?", "visible").Count(ctx)
 		require.NoError(t, err)
 		require.Zero(t, n)
+	})
+}
+
+func TestIntegrationUnset(t *testing.T) {
+	db, _ := testDB(t)
+	ctx := context.Background()
+
+	row := &TriRow{Name: "a", Note: triNull()}
+	_, err := db.NewInsert().Model(row).Returning("id").Exec(ctx)
+	require.NoError(t, err)
+
+	var got TriRow
+	require.NoError(t, db.NewSelect().Model(&got).Where("id = ?", row.ID).Scan(ctx))
+
+	t.Run("an unset field takes the column default on insert", func(t *testing.T) {
+		require.True(t, got.Memo.set)
+		require.NotNil(t, got.Memo.val)
+		require.Equal(t, "dflt", *got.Memo.val)
+	})
+
+	t.Run("a null field is stored as NULL and read back as null, not unset", func(t *testing.T) {
+		require.True(t, got.Note.set)
+		require.Nil(t, got.Note.val)
+	})
+
+	_, err = db.NewUpdate().Model(&TriRow{ID: row.ID, Name: "b", Note: triValue("n")}).WherePK().Exec(ctx)
+	require.NoError(t, err)
+	var after TriRow
+	require.NoError(t, db.NewSelect().Model(&after).Where("id = ?", row.ID).Scan(ctx))
+
+	t.Run("an update leaves an unset column untouched", func(t *testing.T) {
+		require.Equal(t, "b", after.Name)
+		require.NotNil(t, after.Memo.val)
+		require.Equal(t, "dflt", *after.Memo.val)
+	})
+
+	t.Run("an update writes a value", func(t *testing.T) {
+		require.NotNil(t, after.Note.val)
+		require.Equal(t, "n", *after.Note.val)
+	})
+
+	_, err = db.NewUpdate().Model(&TriRow{ID: row.ID, Name: "b", Memo: triNull()}).WherePK().Exec(ctx)
+	require.NoError(t, err)
+	var cleared TriRow
+	require.NoError(t, db.NewSelect().Model(&cleared).Where("id = ?", row.ID).Scan(ctx))
+
+	t.Run("an update writes null over a default", func(t *testing.T) {
+		require.True(t, cleared.Memo.set)
+		require.Nil(t, cleared.Memo.val)
 	})
 }

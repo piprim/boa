@@ -38,6 +38,9 @@ type Field struct {
 	Append AppenderFunc
 	Scan   ScannerFunc
 	IsZero IsZeroerFunc
+	// IsUnset reports whether the value was never set; nil unless the type
+	// implements IsUnset() bool.
+	IsUnset IsZeroerFunc
 }
 
 func (f *Field) String() string {
@@ -95,6 +98,19 @@ func (f *Field) HasZeroValue(v reflect.Value) bool {
 		v = v.Field(index)
 	}
 	return f.IsZero(v)
+}
+
+// HasUnsetValue reports whether the field of strct is unset. It is false for
+// a type without IsUnset and for a field behind a nil pointer.
+func (f *Field) HasUnsetValue(strct reflect.Value) bool {
+	if f.IsUnset == nil {
+		return false
+	}
+	fv, ok := fieldByIndex(strct, f.Index)
+	if !ok {
+		return false
+	}
+	return f.IsUnset(fv)
 }
 
 func (f *Field) AppendValue(gen QueryGen, b []byte, strct reflect.Value) []byte {

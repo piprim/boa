@@ -595,6 +595,7 @@ func (t *Table) newField(sf reflect.StructField, tag tagparser.Tag) *Field {
 	field.Append = FieldAppender(field)
 	field.Scan = FieldScanner(field)
 	field.IsZero = zeroChecker(field.StructField.Type)
+	field.IsUnset = unsetChecker(field.StructField.Type)
 
 	return field
 }

@@ -1069,6 +1069,14 @@ func (q *setQuery) appendSetStruct(
 
 		app, hasValue := q.modelValues[f.Name]
 
+		// An unset field (schema.Field.IsUnset) is not touched unless Value
+		// names the column. ponytail: the bulk slice update builds its SET
+		// from the field list in updateSliceSet and still writes every
+		// column; make it per-row if bulk PATCH is ever needed.
+		if !hasValue && f.HasUnsetValue(model.strct) {
+			continue
+		}
+
 		if !hasValue && q.omitZero && f.HasZeroValue(model.strct) {
 			continue
 		}

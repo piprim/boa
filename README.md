@@ -41,6 +41,11 @@ the context. Reads still run on the pool.
   with an error.
 - A parameter with nothing to type it, such as `SELECT ?` or `ColumnExpr("?", v)`, needs a
   cast in the SQL (`?::int8`); Postgres cannot infer its type from a bare placeholder.
+- A field whose type has an `IsUnset() bool` method, such as `presence.Of[T]`, is written as
+  `DEFAULT` by Insert when unset and left out of SET by a struct Update. Null and values are
+  written as usual, and a NULL result scans to the type's null, never to unset. A bulk
+  Update (`Model(&slice).Bulk()`) writes every column, so it fails with an error when a row
+  has an unset field instead of writing NULL.
 - Untagged structs, maps and slices are sent as JSON; `boa:",array"` fields and
   `pgdialect.Array(v)` are sent as Postgres arrays; `pgdialect.Range` values are sent as
   text and typed by Postgres from the column or operator. Where nothing fixes the type, cast

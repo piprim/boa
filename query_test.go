@@ -1,6 +1,7 @@
 package boa_test
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -9,6 +10,54 @@ import (
 	"github.com/piprim/boa"
 	"github.com/piprim/boa/schema"
 )
+
+// tri is a three-state value like presence.Of[string]: unset, null or a
+// value. IsUnset has a pointer receiver, as presence's does; Value and IsZero
+// have value receivers, as presence's do, so a field is bound through
+// driver.Valuer and OmitZero sees only unset as zero.
+type tri struct {
+	set bool
+	val *string
+}
+
+func triValue(s string) tri { return tri{set: true, val: &s} }
+func triNull() tri          { return tri{set: true} }
+
+func (t *tri) IsUnset() bool { return !t.set }
+
+// IsZero mirrors presence.Of: only unset is zero, null is a set value.
+func (t tri) IsZero() bool { return !t.set }
+
+func (t tri) Value() (driver.Value, error) {
+	if t.val == nil {
+		return nil, nil
+	}
+	return *t.val, nil
+}
+
+func (t *tri) Scan(src any) error {
+	t.set = true
+	switch v := src.(type) {
+	case nil:
+		t.val = nil
+	case string:
+		t.val = &v
+	case []byte:
+		s := string(v)
+		t.val = &s
+	default:
+		return fmt.Errorf("tri: cannot scan %T", src)
+	}
+	return nil
+}
+
+// TriModel is the model of the unset/null snapshot cases.
+type TriModel struct {
+	ID   int64 `boa:",pk,autoincrement"`
+	Name string
+	Note tri
+	Memo tri `boa:",default:'dflt'"`
+}
 
 func TestQuery(t *testing.T) {
 	type Model struct {
@@ -1436,6 +1485,71 @@ func TestQuery(t *testing.T) {
 					WhereOr("id = 2")
 			},
 		},
+		{
+			id: 211,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// unset fields are inserted as DEFAULT, with or without a column default
+				return db.NewInsert().Model(&TriModel{Name: "a"})
+			},
+		},
+		{
+			id: 212,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// null is bound as a nil argument, a value as itself
+				return db.NewInsert().Model(&TriModel{Name: "a", Note: triNull(), Memo: triValue("m")})
+			},
+		},
+		{
+			id: 213,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// an unset field is left out of SET; null and value are written
+				return db.NewUpdate().Model(&TriModel{ID: 1, Name: "a", Note: triNull(), Memo: triValue("m")}).WherePK()
+			},
+		},
+		{
+			id: 214,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// only the unset fields are skipped: Note stays, Memo goes
+				return db.NewUpdate().Model(&TriModel{ID: 1, Name: "a", Note: triNull()}).WherePK()
+			},
+		},
+		{
+			id: 215,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// Value wins over the skip
+				return db.NewUpdate().Model(&TriModel{ID: 1}).Value("memo", "upper(?)", "m").WherePK()
+			},
+		},
+		{
+			id: 216,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// every data field unset: the error of an empty SET
+				type OnlyTri struct {
+					ID   int64 `boa:",pk"`
+					Note tri
+				}
+				return db.NewUpdate().Model(&OnlyTri{ID: 1}).WherePK()
+			},
+		},
+		{
+			id: 217,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// OmitZero keeps a null field: null is set, so not zero
+				return db.NewUpdate().Model(&TriModel{ID: 1, Note: triNull()}).OmitZero().WherePK()
+			},
+		},
+		{
+			id: 218,
+			query: func(db *boa.DB) schema.QueryAppender {
+				// Bulk writes every column of every row, so an unset field is an error
+				// rather than a silent NULL
+				rows := []TriModel{
+					{ID: 1, Name: "a", Note: triValue("n"), Memo: triValue("m")},
+					{ID: 2, Name: "b", Note: triNull()},
+				}
+				return db.NewUpdate().Model(&rows).Bulk()
+			},
+		},
 	}
 
 	t.Run("pg", func(t *testing.T) {
@@ -1450,7 +1564,8 @@ func TestQuery(t *testing.T) {
 
 // renderSnapshot renders q as the SQL pgx would receive followed by a line
 // listing the bound values. time.Time values are replaced by "[TIME]" because
-// soft deletes bind time.Now().
+// soft deletes bind time.Now(); tri values by their Value() because %#v would
+// print a pointer address.
 func renderSnapshot(db *boa.DB, q schema.QueryAppender) string {
 	list := schema.NewArgList()
 	sql, err := q.AppendQuery(db.QueryGen().WithArgList(list), nil)
@@ -1462,8 +1577,11 @@ func renderSnapshot(db *boa.DB, q schema.QueryAppender) string {
 	}
 	args := list.Args()
 	for i, a := range args {
-		if _, ok := a.(time.Time); ok {
+		switch v := a.(type) {
+		case time.Time:
 			args[i] = "[TIME]"
+		case tri:
+			args[i], _ = v.Value()
 		}
 	}
 	return string(sql) + "\n-- args: " + fmt.Sprintf("%#v", args)

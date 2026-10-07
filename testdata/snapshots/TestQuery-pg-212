@@ -1,0 +1,2 @@
+INSERT INTO "tri_models" ("id", "name", "note", "memo") VALUES (DEFAULT, $1, $2, $3) RETURNING "id"
+-- args: []interface {}{"a", interface {}(nil), "m"}

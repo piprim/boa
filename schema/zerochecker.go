@@ -93,3 +93,32 @@ func isZeroLen(v reflect.Value) bool {
 func notZero(v reflect.Value) bool {
 	return false
 }
+
+var isUnsetterType = reflect.TypeFor[isUnsetter]()
+
+// isUnsetter is implemented by values that distinguish "never set" from null
+// and from a value, such as presence.Of[T].
+type isUnsetter interface {
+	IsUnset() bool
+}
+
+// unsetChecker returns a checker for a type that implements isUnsetter,
+// directly or through its pointer, and nil for every other type.
+func unsetChecker(typ reflect.Type) IsZeroerFunc {
+	if typ.Implements(isUnsetterType) {
+		return isUnsetInterface
+	}
+	if typ.Kind() != reflect.Pointer && reflect.PointerTo(typ).Implements(isUnsetterType) {
+		return addrChecker(isUnsetInterface)
+	}
+	return nil
+}
+
+// isUnsetInterface reports IsUnset of v. A nil pointer is not unset: the
+// nil-pointer rules of INSERT and UPDATE apply to it instead.
+func isUnsetInterface(v reflect.Value) bool {
+	if v.Kind() == reflect.Pointer && v.IsNil() {
+		return false
+	}
+	return v.Interface().(isUnsetter).IsUnset()
+}

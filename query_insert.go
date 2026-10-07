@@ -365,8 +365,11 @@ func (q *InsertQuery) appendSliceValues(
 
 // marshalsToDefault checks if the value will be marshaled as DEFAULT
 // when appending it to the VALUES clause in place of the given field.
+// An unset field (see schema.Field.IsUnset) is always DEFAULT: Postgres
+// resolves it to NULL when the column has no default.
 func (q InsertQuery) marshalsToDefault(f *schema.Field, v reflect.Value) bool {
 	return (f.IsPtr && f.HasNilValue(v)) ||
+		f.HasUnsetValue(v) ||
 		(f.HasZeroValue(v) && (f.NullZero || f.SQLDefault != ""))
 }
 

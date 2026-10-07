@@ -353,6 +353,10 @@ func (q *UpdateQuery) Bulk() *UpdateQuery {
 		q.setErr(err)
 		return q
 	}
+	if err := q.unsetInBulk(model); err != nil {
+		q.setErr(err)
+		return q
+	}
 
 	values := q.db.NewValues(model)
 	values.customValueQuery = q.customValueQuery
@@ -362,6 +366,25 @@ func (q *UpdateQuery) Bulk() *UpdateQuery {
 		TableExpr("_data").
 		Set(set).
 		Where(q.updateSliceWhere(q.db.gen, model))
+}
+
+// unsetInBulk returns an error naming the first unset field of the slice.
+// Bulk writes every column of every row through a VALUES table and cannot
+// leave one out, so an unset field would silently become NULL.
+func (q *UpdateQuery) unsetInBulk(model *sliceTableModel) error {
+	fields, err := q.getDataFields()
+	if err != nil {
+		return err
+	}
+	for i := 0; i < model.slice.Len(); i++ {
+		row := indirect(model.slice.Index(i))
+		for _, f := range fields {
+			if f.HasUnsetValue(row) {
+				return fmt.Errorf("boa: Bulk cannot skip the unset field %s of row %d: set it or update the rows one by one", f.Name, i)
+			}
+		}
+	}
+	return nil
 }
 
 func (q *UpdateQuery) updateSliceSet(
